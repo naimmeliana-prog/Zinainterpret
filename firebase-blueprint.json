@@ -1,0 +1,219 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Non-PII interpreter workspace preferences and real-time sync state.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "alias": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\- ]+$",
+          "description": "Anonymous or pseudonymous display alias."
+        },
+        "preferredUiLang": {
+          "type": "string",
+          "enum": ["es", "en", "fr", "de", "it", "pt"],
+          "description": "Preferred UI language code."
+        },
+        "preferredTheme": {
+          "type": "string",
+          "enum": ["system", "dark", "light"],
+          "description": "Theme preference."
+        },
+        "defaultSourceLang": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16,
+          "description": "Default source speech language code."
+        },
+        "defaultTargetLang": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16,
+          "description": "Default target interpretation language code."
+        },
+        "cloudSyncEnabled": {
+          "type": "boolean",
+          "description": "Whether multi-device progress summary sync is enabled."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "alias",
+        "preferredUiLang",
+        "preferredTheme",
+        "defaultSourceLang",
+        "defaultTargetLang",
+        "cloudSyncEnabled",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "EncryptedBackup": {
+      "title": "EncryptedBackup",
+      "description": "Client-side AES-GCM-256 encrypted backup snapshot stored in Firestore.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": ["AES-GCM-256"]
+        },
+        "ciphertext": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 700000
+        },
+        "iv": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 64
+        },
+        "salt": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 64
+        },
+        "sessionCount": {
+          "type": "integer"
+        },
+        "byteSize": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "label",
+        "algorithm",
+        "ciphertext",
+        "iv",
+        "salt",
+        "sessionCount",
+        "byteSize",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ProgressSummary": {
+      "title": "ProgressSummary",
+      "description": "Anonymized numeric interpreting practice metric synced across devices.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "exerciseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["simultaneous", "consecutive"]
+        },
+        "sourceLang": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16
+        },
+        "targetLang": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16
+        },
+        "fluencyScore": {
+          "type": "integer"
+        },
+        "precisionScore": {
+          "type": "integer"
+        },
+        "intonationScore": {
+          "type": "integer"
+        },
+        "wpm": {
+          "type": "integer"
+        },
+        "durationSec": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "exerciseId",
+        "mode",
+        "sourceLang",
+        "targetLang",
+        "fluencyScore",
+        "precisionScore",
+        "intonationScore",
+        "wpm",
+        "durationSec",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private non-PII user settings and profile document."
+    },
+    "/users/{userId}/backups/{backupId}": {
+      "schema": { "$ref": "#/entities/EncryptedBackup" },
+      "description": "Client-encrypted AES-GCM-256 cloud backup snapshots."
+    },
+    "/users/{userId}/progressSummaries/{summaryId}": {
+      "schema": { "$ref": "#/entities/ProgressSummary" },
+      "description": "Real-time cross-device anonymized practice metrics."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Cabina — Estudio de Interpretación de Conferencias",
+  "description": "Plataforma gratuita y de código abierto para la formación progresiva en interpretación simultánea y consecutiva, con ejercicios de audio, toma de notas con símbolos, análisis de voz con IA, cifrado local AES-GCM y sincronización privada.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
