@@ -2,10 +2,19 @@ import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 
 let cachedAi: GoogleGenAI | null = null;
 
+export class GeminiServiceError extends Error {
+  status: number;
+  constructor(message: string, status = 500) {
+    super(message);
+    this.name = 'GeminiServiceError';
+    this.status = status;
+  }
+}
+
 export function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured in the server environment.');
+    throw new GeminiServiceError('GEMINI_API_KEY is not configured in the server environment.', 500);
   }
   if (!cachedAi) {
     cachedAi = new GoogleGenAI({
@@ -18,6 +27,102 @@ export function getGeminiClient(): GoogleGenAI {
     });
   }
   return cachedAi;
+}
+
+function parseUpstreamError(err: unknown): { code: number; message: string; transient: boolean } {
+  const raw = err instanceof Error ? err.message : String(err || 'Upstream error');
+  let code = 500;
+  let message = raw;
+  let statusStr = '';
+
+  const obj = err as Record<string, unknown> | null;
+  if (obj && typeof obj.status === 'number') {
+    code = obj.status;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { code?: number; message?: string; status?: string };
+    };
+    if (parsed?.error) {
+      if (typeof parsed.error.code === 'number') code = parsed.error.code;
+      if (typeof parsed.error.message === 'string') message = parsed.error.message;
+      if (typeof parsed.error.status === 'string') statusStr = parsed.error.status;
+    }
+  } catch {
+    // Non-JSON error message; inspect raw string
+    const match = raw.match(/"code"\s*:\s*(\d{3})/);
+    if (match) code = Number(match[1]);
+  }
+
+  const transient =
+    code === 503 ||
+    code === 502 ||
+    code === 504 ||
+    statusStr === 'UNAVAILABLE' ||
+    /high demand|unavailable|overloaded|try again later|temporarily/i.test(message);
+
+  return { code, message, transient };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new GeminiServiceError(`${label}: Tiempo de espera agotado (503).`, 503));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function withTransientRetry<T>(
+  fn: () => Promise<T>,
+  delaysMs: number[] = [400],
+  timeoutMs = 15000,
+  label = 'Gemini'
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= delaysMs.length; attempt++) {
+    try {
+      return await withTimeout(fn(), timeoutMs, label);
+    } catch (err) {
+      lastErr = err;
+      const parsed = parseUpstreamError(err);
+      if (!parsed.transient || attempt === delaysMs.length) {
+        throw err;
+      }
+      await sleep(delaysMs[attempt]);
+    }
+  }
+  throw lastErr;
+}
+
+function toCleanServiceError(err: unknown, contextLabel: string): GeminiServiceError {
+  if (err instanceof GeminiServiceError) return err;
+  const parsed = parseUpstreamError(err);
+  if (parsed.transient) {
+    return new GeminiServiceError(
+      `${contextLabel}: El servicio de IA tiene alta demanda temporal (503). Inténtalo de nuevo en unos segundos.`,
+      503
+    );
+  }
+  if (parsed.code === 429) {
+    return new GeminiServiceError(
+      `${contextLabel}: Límite temporal de solicitudes alcanzado (429). Espera unos segundos e inténtalo de nuevo.`,
+      429
+    );
+  }
+  return new GeminiServiceError(parsed.message || `${contextLabel} failed.`, parsed.code || 500);
 }
 
 export interface EvaluateRequestPayload {
@@ -59,7 +164,7 @@ export async function generateConferenceSpeechAudio(params: {
   const ai = getGeminiClient();
   const cleanText = params.text.trim().slice(0, 4500);
   if (!cleanText) {
-    throw new Error('Speech text cannot be empty.');
+    throw new GeminiServiceError('Speech text cannot be empty.', 400);
   }
 
   const voice = params.voiceName || 'Charon';
@@ -67,40 +172,46 @@ export async function generateConferenceSpeechAudio(params: {
     params.style ||
     `Formal international conference delegate speaking clearly in ${params.lang} at measured diplomatic cadence`;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.8-flash-lite-tts',
-    contents: [
-      {
-        role: 'user',
-        parts: [
+  try {
+    const response = await withTransientRetry(() =>
+      ai.models.generateContent({
+        model: 'gemini-3.8-flash-lite-tts',
+        contents: [
           {
-            text: cleanText,
-            speechMetadata: {
-              style,
-            },
+            role: 'user',
+            parts: [
+              {
+                text: cleanText,
+                speechMetadata: {
+                  style,
+                },
+              },
+            ],
           },
         ],
-      },
-    ],
-    config: {
-      responseModalities: ['AUDIO'],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: voice },
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: voice },
+            },
+          },
         },
-      },
-    },
-  });
+      })
+    );
 
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) {
-    throw new Error('TTS model did not return audio data.');
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) {
+      throw new GeminiServiceError('TTS model did not return audio data.', 502);
+    }
+
+    return {
+      audioBase64: base64Audio,
+      mimeType: 'audio/wav',
+    };
+  } catch (err) {
+    throw toCleanServiceError(err, 'Síntesis de voz');
   }
-
-  return {
-    audioBase64: base64Audio,
-    mimeType: 'audio/wav',
-  };
 }
 
 export async function evaluateInterpretation(
@@ -116,22 +227,31 @@ export async function evaluateInterpretation(
         data: payload.audioBase64,
       },
     };
-    const transcribeRes = await ai.models.generateContent({
-      model: 'gemini-3.5-transcribe',
-      contents: {
-        parts: [
-          audioPart,
-          {
-            text: `Transcribe this conference interpretation recording accurately in ${payload.targetLang}. Preserve hesitations, self-corrections, or incomplete clauses verbatim.`,
+    try {
+      const transcribeRes = await withTransientRetry(() =>
+        ai.models.generateContent({
+          model: 'gemini-3.5-transcribe',
+          contents: {
+            parts: [
+              audioPart,
+              {
+                text: `Transcribe this conference interpretation recording accurately in ${payload.targetLang}. Preserve hesitations, self-corrections, or incomplete clauses verbatim.`,
+              },
+            ],
           },
-        ],
-      },
-    });
-    userTranscript = (transcribeRes.text || '').trim();
+        })
+      );
+      userTranscript = (transcribeRes.text || '').trim();
+    } catch (err) {
+      throw toCleanServiceError(err, 'Transcripción de audio');
+    }
   }
 
   if (!userTranscript) {
-    throw new Error('No speech was detected in the recording. Please record or enter an interpretation.');
+    throw new GeminiServiceError(
+      'No speech was detected in the recording. Please record or enter an interpretation.',
+      400
+    );
   }
 
   const wordCount = userTranscript.split(/\s+/).filter(Boolean).length;
@@ -170,43 +290,63 @@ Provide an objective, constructive pedagogical assessment covering:
 8. actionableRecommendations: 3 concrete drills for the next practice session.
 9. suggestedSymbols: 4 high-utility consecutive note-taking symbols (Rozan/Matyssek style) for key concepts in this source speech.`;
 
-  const evalRes = await ai.models.generateContent({
-    model: 'gemini-4-hydrogen',
-    contents: prompt,
-    config: {
-      systemInstruction:
-        'You are a senior UN and EU Directorate-General for Interpretation (DG SCIC) conference interpreting examiner. Be precise, encouraging, and strictly grounded in the provided transcripts.',
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          fluencyScore: { type: Type.INTEGER },
-          precisionScore: { type: Type.INTEGER },
-          intonationScore: { type: Type.INTEGER },
-          estimatedWpm: { type: Type.INTEGER },
-          pauseAnalysis: { type: Type.STRING },
-          prosodyAndIntonationFeedback: { type: Type.STRING },
-          semanticFidelityFeedback: { type: Type.STRING },
-          actionableRecommendations: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-          },
-          suggestedSymbols: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                concept: { type: Type.STRING },
-                symbol: { type: Type.STRING },
-                category: { type: Type.STRING },
+  const runEval = async (modelName: 'gemini-4-hydrogen' | 'gemini-3.1-flash-lite') =>
+    ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: {
+        systemInstruction:
+          'You are a senior UN and EU Directorate-General for Interpretation (DG SCIC) conference interpreting examiner. Be precise, encouraging, and strictly grounded in the provided transcripts.',
+        thinkingConfig: {
+          thinkingLevel:
+            modelName === 'gemini-4-hydrogen' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL,
+        },
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            fluencyScore: { type: Type.INTEGER },
+            precisionScore: { type: Type.INTEGER },
+            intonationScore: { type: Type.INTEGER },
+            estimatedWpm: { type: Type.INTEGER },
+            pauseAnalysis: { type: Type.STRING },
+            prosodyAndIntonationFeedback: { type: Type.STRING },
+            semanticFidelityFeedback: { type: Type.STRING },
+            actionableRecommendations: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            suggestedSymbols: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  concept: { type: Type.STRING },
+                  symbol: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                },
               },
             },
           },
         },
       },
-    },
-  });
+    });
+
+  let evalRes;
+  try {
+    try {
+      evalRes = await withTransientRetry(() => runEval('gemini-4-hydrogen'));
+    } catch (primaryErr) {
+      const parsed = parseUpstreamError(primaryErr);
+      if (parsed.transient) {
+        evalRes = await withTransientRetry(() => runEval('gemini-3.1-flash-lite'), [500]);
+      } else {
+        throw primaryErr;
+      }
+    }
+  } catch (err) {
+    throw toCleanServiceError(err, 'Evaluación vocal');
+  }
 
   const parsed = JSON.parse((evalRes.text || '{}').trim());
   const clamp = (n: unknown, min: number, max: number, fallback: number) => {
@@ -244,35 +384,59 @@ export async function suggestNoteSymbols(params: {
   const ai = getGeminiClient();
   const excerpt = params.excerpt.trim().slice(0, 1500);
   if (!excerpt) {
-    throw new Error('Excerpt is required for note symbol suggestions.');
+    throw new GeminiServiceError('Excerpt is required for note symbol suggestions.', 400);
   }
 
-  const res = await ai.models.generateContent({
-    model: 'gemini-4-hydrogen',
-    contents: `Extract 6 high-frequency consecutive interpreting note-taking symbols (following Jean-François Rozan's 7 principles and Matyssek notation) for this speech excerpt in ${params.sourceLang}. Explain concepts and usage in language code "${params.uiLang || 'es'}".\n\nExcerpt:\n"""${excerpt}"""`,
-    config: {
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          suggestions: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                concept: { type: Type.STRING },
-                symbol: { type: Type.STRING },
-                abbreviation: { type: Type.STRING },
-                principle: { type: Type.STRING },
+  const runSuggest = async (modelName: 'gemini-4-hydrogen' | 'gemini-3.1-flash-lite') =>
+    ai.models.generateContent({
+      model: modelName,
+      contents: `Extract 6 high-frequency consecutive interpreting note-taking symbols (following Jean-François Rozan's 7 principles and Matyssek notation) for this speech excerpt in ${params.sourceLang}. Explain concepts and usage in language code "${params.uiLang || 'es'}".\n\nExcerpt:\n"""${excerpt}"""`,
+      config: {
+        thinkingConfig: {
+          thinkingLevel:
+            modelName === 'gemini-4-hydrogen' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL,
+        },
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            suggestions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  concept: { type: Type.STRING },
+                  symbol: { type: Type.STRING },
+                  abbreviation: { type: Type.STRING },
+                  principle: { type: Type.STRING },
+                },
               },
             },
+            layoutTip: { type: Type.STRING },
           },
-          layoutTip: { type: Type.STRING },
         },
       },
-    },
-  });
+    });
 
-  return JSON.parse((res.text || '{"suggestions":[],"layoutTip":""}').trim());
+  try {
+    let res;
+    try {
+      res = await withTransientRetry(() => runSuggest('gemini-4-hydrogen'), [], 9000, 'Sugerencias');
+    } catch (primaryErr) {
+      const parsed = parseUpstreamError(primaryErr);
+      if (parsed.transient) {
+        res = await withTransientRetry(
+          () => runSuggest('gemini-3.1-flash-lite'),
+          [350],
+          10000,
+          'Sugerencias'
+        );
+      } else {
+        throw primaryErr;
+      }
+    }
+    return JSON.parse((res.text || '{"suggestions":[],"layoutTip":""}').trim());
+  } catch (err) {
+    throw toCleanServiceError(err, 'Sugerencias de símbolos');
+  }
 }

@@ -5,6 +5,7 @@ import http from 'http';
 import path from 'path';
 import {
   evaluateInterpretation,
+  GeminiServiceError,
   generateConferenceSpeechAudio,
   suggestNoteSymbols,
 } from './src/server/geminiService.ts';
@@ -34,9 +35,10 @@ async function startServer() {
       });
       return res.json(audio);
     } catch (err) {
+      const status = err instanceof GeminiServiceError ? err.status : 500;
       const message = err instanceof Error ? err.message : 'TTS generation failed.';
       console.error('[/api/gemini/tts]', message);
-      return res.status(500).json({ error: message });
+      return res.status(status).json({ error: message });
     }
   });
 
@@ -61,9 +63,10 @@ async function startServer() {
       });
       return res.json(result);
     } catch (err) {
+      const status = err instanceof GeminiServiceError ? err.status : 500;
       const message = err instanceof Error ? err.message : 'Evaluation failed.';
       console.error('[/api/gemini/evaluate]', message);
-      return res.status(500).json({ error: message });
+      return res.status(status).json({ error: message });
     }
   });
 
@@ -80,9 +83,10 @@ async function startServer() {
       });
       return res.json(data);
     } catch (err) {
+      const status = err instanceof GeminiServiceError ? err.status : 500;
       const message = err instanceof Error ? err.message : 'Symbol suggestion failed.';
       console.error('[/api/gemini/note-symbols]', message);
-      return res.status(500).json({ error: message });
+      return res.status(status).json({ error: message });
     }
   });
 

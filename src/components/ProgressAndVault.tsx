@@ -3,7 +3,6 @@ import {
   Download,
   FileDown,
   FileText,
-  GitBranch,
   Lock,
   Play,
   Shield,
@@ -60,11 +59,6 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupStatus, setBackupStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // GitHub Gist / Repo Export Sync
-  const [githubToken, setGithubToken] = useState('');
-  const [githubSyncMsg, setGithubSyncMsg] = useState('');
-  const [githubSyncing, setGithubSyncing] = useState(false);
 
   // Audio playback for saved sessions
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -172,43 +166,6 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
       setBackupStatus('Clave maestra incorrecta o archivo cifrado dañado.');
     } finally {
       setBackupBusy(false);
-    }
-  };
-
-  const handlePushGitHubGist = async () => {
-    if (!githubToken.trim()) {
-      setGithubSyncMsg('Introduce un GitHub Personal Access Token (scope: gist) o usa la exportación JSON.');
-      return;
-    }
-    setGithubSyncing(true);
-    setGithubSyncMsg('');
-    try {
-      const payload = sessions.map(({ userAudioBase64: _u, sourceAudioBase64: _s, ...rest }) => rest);
-      const res = await fetch('https://api.github.com/gists', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${githubToken.trim()}`,
-          Accept: 'application/vnd.github+json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          description: `Cabina Practice Sessions Export (${new Date().toISOString()})`,
-          public: false,
-          files: {
-            'cabina-sessions.json': {
-              content: JSON.stringify(payload, null, 2),
-            },
-          },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'GitHub API error');
-      setGithubSyncMsg(`Sincronizado en GitHub Gist privado: ${data.html_url}`);
-      setGithubToken('');
-    } catch (err) {
-      setGithubSyncMsg(err instanceof Error ? err.message : 'Error al conectar con GitHub.');
-    } finally {
-      setGithubSyncing(false);
     }
   };
 
@@ -377,9 +334,9 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
         )}
       </div>
 
-      {/* Local Private Profile + Portable Encrypted Backup & GitHub/Vercel Grid */}
+      {/* Local Private Profile + Portable Encrypted Backup Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Local Alias & Portable AES-GCM-256 Backup */}
+        {/* Local Alias Card */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-6 space-y-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -401,7 +358,9 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
                   {alias}
                 </div>
                 <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
-                  {alias.startsWith('Anon-') ? 'Sesión anónima en dispositivo' : 'Perfil local sin datos personales'}
+                  {alias.startsWith('Anon-')
+                    ? 'Sesión anónima en dispositivo'
+                    : 'Perfil local sin datos personales'}
                 </div>
               </div>
             </div>
@@ -436,112 +395,72 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
           {aliasSaved && (
             <p className="text-xs text-emerald-600 dark:text-emerald-400">{aliasSaved}</p>
           )}
-
-          {/* Portable AES-GCM-256 Encrypted File Backup */}
-          <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t.cloudBackupTitle}
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <input
-                type="text"
-                value={backupLabel}
-                onChange={(e) => setBackupLabel(e.target.value)}
-                placeholder="Etiqueta de respaldo"
-                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
-              />
-              <input
-                type="password"
-                value={backupPassphrase}
-                onChange={(e) => setBackupPassphrase(e.target.value)}
-                placeholder={t.backupPassphraseLabel}
-                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => void handleDownloadEncryptedBackup()}
-                disabled={backupBusy || sessions.length === 0}
-                className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-xs font-medium text-white hover:bg-sky-500 transition-colors disabled:opacity-45 min-h-[42px]"
-              >
-                <Download className="w-4 h-4" aria-hidden="true" />
-                <span>{t.createEncryptedBackup}</span>
-              </button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                onChange={(e) => void handleImportEncryptedFile(e)}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={backupBusy}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-45 min-h-[42px]"
-              >
-                <Upload className="w-4 h-4" aria-hidden="true" />
-                <span>{t.restoreEncryptedBackup}</span>
-              </button>
-            </div>
-
-            {backupStatus && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">{backupStatus}</p>
-            )}
-          </div>
         </div>
 
-        {/* GitHub & Vercel Deployment & Sync Card */}
+        {/* Portable AES-GCM-256 Encrypted File Backup Card */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-6 space-y-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <GitBranch className="w-4 h-4 text-amber-500" aria-hidden="true" />
+              <Lock className="w-4 h-4 text-emerald-500" aria-hidden="true" />
               <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                {t.githubVercelTitle}
+                {t.cloudBackupTitle}
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              {t.githubVercelSubtitle}
+              Empaqueta todo tu historial cifrado con clave maestra PBKDF2 + AES-GCM-256 para
+              trasladarlo de forma privada entre dispositivos sin servidores externos.
             </p>
           </div>
 
-          <div className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0B0F17] p-3.5 space-y-1.5 font-mono">
-              <div>1. git push origin main (.github/workflows/ci-deploy.yml)</div>
-              <div>2. vercel --prod (vercel.json + api/gemini/[action].ts)</div>
-              <div>3. Env var en Vercel: GEMINI_API_KEY</div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <input
+              type="text"
+              value={backupLabel}
+              onChange={(e) => setBackupLabel(e.target.value)}
+              placeholder="Etiqueta de respaldo"
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
+            />
+            <input
+              type="password"
+              value={backupPassphrase}
+              onChange={(e) => setBackupPassphrase(e.target.value)}
+              placeholder={t.backupPassphraseLabel}
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
+            />
           </div>
 
-          <div className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-              Exportación automática a GitHub Gist privado (opcional, token de un solo uso):
-            </label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="password"
-                value={githubToken}
-                onChange={(e) => setGithubToken(e.target.value)}
-                placeholder="GitHub Personal Access Token (gist)"
-                className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
-              />
-              <button
-                type="button"
-                onClick={() => void handlePushGitHubGist()}
-                disabled={githubSyncing || sessions.length === 0}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-45 whitespace-nowrap min-h-[42px]"
-              >
-                <GitBranch className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>{githubSyncing ? 'Sincronizando...' : 'Sincronizar en GitHub'}</span>
-              </button>
-            </div>
-            {githubSyncMsg && (
-              <p className="text-xs text-sky-600 dark:text-sky-400 break-all">{githubSyncMsg}</p>
-            )}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => void handleDownloadEncryptedBackup()}
+              disabled={backupBusy || sessions.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-xs font-medium text-white hover:bg-sky-500 transition-colors disabled:opacity-45 min-h-[42px]"
+            >
+              <Download className="w-4 h-4" aria-hidden="true" />
+              <span>{t.createEncryptedBackup}</span>
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={(e) => void handleImportEncryptedFile(e)}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={backupBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-45 min-h-[42px]"
+            >
+              <Upload className="w-4 h-4" aria-hidden="true" />
+              <span>{t.restoreEncryptedBackup}</span>
+            </button>
           </div>
+
+          {backupStatus && (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">{backupStatus}</p>
+          )}
         </div>
       </div>
     </section>

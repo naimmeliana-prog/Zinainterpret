@@ -188,7 +188,20 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
       setAiSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
       setLayoutTip(String(data.layoutTip || ''));
     } catch (err) {
-      setSymbolError(err instanceof Error ? err.message : 'No disponible sin conexión');
+      let msg = err instanceof Error ? err.message : 'No disponible sin conexión';
+      if (msg.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(msg) as { error?: { code?: number; message?: string } };
+          if (parsed?.error?.code === 503) {
+            msg = 'El servicio de IA tiene alta demanda temporal (503). Pulsa Reintentar en unos segundos.';
+          } else if (parsed?.error?.message) {
+            msg = parsed.error.message;
+          }
+        } catch {
+          // Keep message
+        }
+      }
+      setSymbolError(msg);
     } finally {
       setLoadingSymbols(false);
     }
@@ -345,7 +358,17 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
         </div>
 
         {symbolError && (
-          <p className="text-xs text-amber-600 dark:text-amber-400">{symbolError}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <span>{symbolError}</span>
+            <button
+              type="button"
+              onClick={() => void requestAiSymbols()}
+              disabled={loadingSymbols}
+              className="font-semibold underline hover:no-underline whitespace-nowrap shrink-0"
+            >
+              Reintentar
+            </button>
+          </div>
         )}
 
         {aiSuggestions.length > 0 && (

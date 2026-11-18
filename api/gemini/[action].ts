@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   evaluateInterpretation,
+  GeminiServiceError,
   generateConferenceSpeechAudio,
   suggestNoteSymbols,
 } from '../../src/server/geminiService.js';
@@ -62,7 +63,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
 
     return res.status(404).json({ error: 'Unknown Gemini endpoint action' });
   } catch (err) {
+    const status = err instanceof GeminiServiceError ? err.status : 500;
     const message = err instanceof Error ? err.message : 'Server error';
-    return res.status(500).json({ error: message });
+    return res.status(status).json({ error: message });
   }
 }

@@ -86,8 +86,6 @@ export interface Translations {
   backupPassphraseLabel: string;
   createEncryptedBackup: string;
   restoreEncryptedBackup: string;
-  githubVercelTitle: string;
-  githubVercelSubtitle: string;
   offlineBanner: string;
   installApp: string;
   themeSystem: string;
@@ -181,9 +179,6 @@ const es: Translations = {
   backupPassphraseLabel: 'Clave maestra de cifrado (mín. 8 caracteres)',
   createEncryptedBackup: 'Descargar copia cifrada (.enc.json)',
   restoreEncryptedBackup: 'Restaurar desde archivo cifrado',
-  githubVercelTitle: 'Sincronización GitHub y Despliegue Vercel',
-  githubVercelSubtitle:
-    'Repositorio preparado con CI/CD, funciones serverless y licencia MIT de código abierto.',
   offlineBanner: 'Modo sin conexión — Bóveda local cifrada activa',
   installApp: 'Instalar app',
   themeSystem: 'Auto',
@@ -276,9 +271,6 @@ const en: Translations = {
   backupPassphraseLabel: 'Master encryption passphrase (min. 8 chars)',
   createEncryptedBackup: 'Download encrypted backup (.enc.json)',
   restoreEncryptedBackup: 'Restore from encrypted file',
-  githubVercelTitle: 'GitHub Sync & Vercel Deployment',
-  githubVercelSubtitle:
-    'Repository configured with CI/CD, serverless routes, and open-source MIT license.',
   offlineBanner: 'Offline mode — Local encrypted vault active',
   installApp: 'Install app',
   themeSystem: 'Auto',
