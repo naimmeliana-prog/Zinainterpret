@@ -18,6 +18,7 @@ import {
 import type {
   ConferenceExercise,
   EncryptedBackupDoc,
+  InterpretingMode,
   LocalPracticeSession,
   ProgressSummaryDoc,
   SpeechLang,
@@ -29,6 +30,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { InterpretingStudio } from './components/InterpretingStudio';
 import { OfflineBanner, PWAInstallButton } from './components/PWAInstallButton';
 import { ProgressAndVault } from './components/ProgressAndVault';
+import { TechniquesAndManual } from './components/TechniquesAndManual';
 
 export default function App() {
   const [uiLang, setUiLang] = useState<UiLang>(() => {
@@ -42,6 +44,9 @@ export default function App() {
   });
 
   const [activeExercise, setActiveExercise] = useState<ConferenceExercise>(PROGRESSIVE_EXERCISES[0]);
+  const [requestedStudioMode, setRequestedStudioMode] = useState<
+    { mode: InterpretingMode; tick: number } | undefined
+  >(undefined);
   const [sourceLang, setSourceLang] = useState<SpeechLang>('en');
   const [targetLang, setTargetLang] = useState<SpeechLang>('es');
 
@@ -114,6 +119,18 @@ export default function App() {
 
   const handleSelectExercise = (ex: ConferenceExercise) => {
     setActiveExercise(ex);
+    setRequestedStudioMode({ mode: ex.mode, tick: Date.now() });
+    document.getElementById('studio')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleJumpToStudio = (mode: InterpretingMode) => {
+    if (activeExercise.mode !== mode) {
+      const match = PROGRESSIVE_EXERCISES.find((ex) => ex.mode === mode);
+      if (match) {
+        setActiveExercise(match);
+      }
+    }
+    setRequestedStudioMode({ mode, tick: Date.now() });
     document.getElementById('studio')?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -344,11 +361,15 @@ export default function App() {
             onSelectExercise={handleSelectExercise}
           />
 
+          {/* Expanded Technical Manual: Simultaneous, Consecutive, Worked Rozan Notebooks & 36 Symbols */}
+          <TechniquesAndManual uiLang={uiLang} onJumpToStudio={handleJumpToStudio} />
+
           {/* Active Interpreting Booth Studio */}
           <InterpretingStudio
             uiLang={uiLang}
             t={t}
             exercise={activeExercise}
+            requestedMode={requestedStudioMode}
             sourceLang={sourceLang}
             targetLang={targetLang}
             onSourceLangChange={setSourceLang}

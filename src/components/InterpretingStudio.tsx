@@ -27,6 +27,7 @@ interface InterpretingStudioProps {
   uiLang: UiLang;
   t: Translations;
   exercise: ConferenceExercise;
+  requestedMode?: { mode: InterpretingMode; tick: number };
   sourceLang: SpeechLang;
   targetLang: SpeechLang;
   onSourceLangChange: (lang: SpeechLang) => void;
@@ -51,6 +52,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   uiLang,
   t,
   exercise,
+  requestedMode,
   sourceLang,
   targetLang,
   onSourceLangChange,
@@ -108,6 +110,12 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
     setEvaluation(null);
     setSavedNotice('');
   }, [exercise, sourceLang]);
+
+  useEffect(() => {
+    if (requestedMode) {
+      setMode(requestedMode.mode);
+    }
+  }, [requestedMode]);
 
   useEffect(() => {
     if (sourceAudioRef.current) {
@@ -833,6 +841,14 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
                 <div>1. Espera {decalageSec}s para captar la unidad mínima de sentido (S+V).</div>
                 <div>2. Transforma subordinadas largas en oraciones coordinadas cortas.</div>
                 <div>3. Anota cifras y siglas breves mientras escuchas en el micrófono.</div>
+                <div className="pt-2">
+                  <a
+                    href="#techniques"
+                    className="font-medium text-sky-600 dark:text-sky-400 hover:underline"
+                  >
+                    Ver manual completo de técnicas (Simultánea y Rozan) →
+                  </a>
+                </div>
               </div>
             </div>
           )}

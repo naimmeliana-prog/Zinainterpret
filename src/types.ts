@@ -17,12 +17,78 @@ export interface ConferenceExercise {
   scripts: Record<SpeechLang, string>;
 }
 
+export type NoteSymbolCategory =
+  | 'logic'
+  | 'diplomacy'
+  | 'economy'
+  | 'time'
+  | 'stance'
+  | 'verbs'
+  | 'modifiers';
+
 export interface NoteSymbol {
   id: string;
   symbol: string;
   meaning: Record<UiLang, string>;
-  category: 'logic' | 'diplomacy' | 'economy' | 'time' | 'stance';
+  category: NoteSymbolCategory;
   example: string;
+  usageNote?: string;
+  applicationSentence?: string;
+  applicationNotation?: string;
+}
+
+export interface RozanHierarchyStep {
+  level: string;
+  zone: string;
+  title: string;
+  rule: string;
+  visualPattern: string;
+  exampleText: string;
+}
+
+export interface RozanConnectorItem {
+  symbol: string;
+  name: string;
+  placement: string;
+  spokenTriggers: string;
+  sentenceExample: string;
+  notationExample: string;
+}
+
+export interface RozanAbbreviationItem {
+  id: string;
+  domain: 'economy' | 'politics';
+  concept: string;
+  abbreviation: string;
+  rozanRule: string;
+  exampleInContext: string;
+}
+
+export interface TechniqueGuide {
+  id: string;
+  mode: InterpretingMode;
+  title: string;
+  subtitle: string;
+  principle: string;
+  whenToUse: string;
+  exampleSource: string;
+  exampleOutput: string;
+  commonPitfall: string;
+  drillTip: string;
+}
+
+export interface NotebookWorkedExample {
+  id: string;
+  title: string;
+  institution: string;
+  sourceSpeech: string;
+  rozanLines: Array<{
+    margin: string;
+    indent: 0 | 1 | 2;
+    notation: string;
+    gloss: string;
+  }>;
+  restitutionTip: string;
 }
 
 export interface InstitutionalResource {

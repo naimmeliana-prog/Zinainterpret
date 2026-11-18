@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
+import http from 'http';
 import path from 'path';
 import {
   evaluateInterpretation,
@@ -10,6 +11,7 @@ import {
 
 async function startServer() {
   const app = express();
+  const httpServer = http.createServer(app);
   const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '25mb' }));
@@ -88,9 +90,39 @@ async function startServer() {
   const isProd = process.env.NODE_ENV === 'production' && fs.existsSync(path.join(distDir, 'index.html'));
 
   if (!isProd) {
+    const hmrEnabled = process.env.ENABLE_HMR === 'true';
+    if (!hmrEnabled) {
+      app.get('/@vite/client', (_req, res, next) => {
+        const origEnd = res.end.bind(res);
+        const chunks: Buffer[] = [];
+        res.write = ((chunk: unknown) => {
+          if (chunk) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+          }
+          return true;
+        }) as typeof res.write;
+        res.end = ((chunk?: unknown) => {
+          if (chunk && typeof chunk !== 'function') {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+          }
+          let body = Buffer.concat(chunks).toString('utf-8');
+          body = body.replace(/await wsTransport\.connect\(handlers\);/g, 'return;');
+          if (!res.headersSent) {
+            res.setHeader('Content-Length', Buffer.byteLength(body));
+          }
+          return origEnd(body);
+        }) as typeof res.end;
+        next();
+      });
+    }
+
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        ws: hmrEnabled ? { server: httpServer } : false,
+        hmr: hmrEnabled ? { server: httpServer } : false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -101,7 +133,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Cabina server listening on http://0.0.0.0:${PORT}`);
   });
 }
