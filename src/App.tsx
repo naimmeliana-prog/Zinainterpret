@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
 import { BookOpen, Globe2, Headphones, LineChart, Monitor, Moon, Sun } from 'lucide-react';
 import { PROGRESSIVE_EXERCISES } from './data/curriculumAndRepos';
 import { TRANSLATIONS, UI_LANGUAGE_LABELS } from './i18n/translations';
@@ -8,19 +7,10 @@ import {
   loadAllLocalSessions,
   saveEncryptedLocalSession,
 } from './lib/cryptoVault';
-import {
-  auth,
-  subscribeToEncryptedBackups,
-  subscribeToProgressSummaries,
-  syncProgressSummaryToFirestore,
-  updateUserPreferences,
-} from './lib/firebase';
 import type {
   ConferenceExercise,
-  EncryptedBackupDoc,
   InterpretingMode,
   LocalPracticeSession,
-  ProgressSummaryDoc,
   SpeechLang,
   ThemePreference,
   UiLang,
@@ -50,13 +40,12 @@ export default function App() {
   const [sourceLang, setSourceLang] = useState<SpeechLang>('en');
   const [targetLang, setTargetLang] = useState<SpeechLang>('es');
 
-  // Local Encrypted Vault State
+  // Local Encrypted Vault & Private Alias State
   const [localSessions, setLocalSessions] = useState<LocalPracticeSession[]>([]);
-
-  // Firebase Auth & Firestore Real-time Sync State
-  const [user, setUser] = useState<User | null>(null);
-  const [cloudBackups, setCloudBackups] = useState<EncryptedBackupDoc[]>([]);
-  const [cloudSummaries, setCloudSummaries] = useState<ProgressSummaryDoc[]>([]);
+  const [localAlias, setLocalAlias] = useState<string>(() => {
+    const saved = localStorage.getItem('cabina_local_alias');
+    return saved || `Anon-${Math.random().toString(36).slice(2, 8)}`;
+  });
 
   const t = TRANSLATIONS[uiLang];
 
@@ -89,33 +78,9 @@ export default function App() {
     void loadAllLocalSessions().then(setLocalSessions).catch(() => {});
   }, []);
 
-  // Listen to Firebase Auth & attach Firestore listeners only when authenticated
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (!currentUser) {
-        setCloudBackups([]);
-        setCloudSummaries([]);
-      }
-    });
-    return () => unsubAuth();
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    const unsubBackups = subscribeToEncryptedBackups(user.uid, setCloudBackups);
-    const unsubSummaries = subscribeToProgressSummaries(user.uid, setCloudSummaries);
-    return () => {
-      unsubBackups();
-      unsubSummaries();
-    };
-  }, [user]);
-
-  const userAlias = user
-    ? user.isAnonymous
-      ? `Anon-${user.uid.slice(0, 6)}`
-      : user.email?.replace(/@cabina\.local$/, '') || `Cabina-${user.uid.slice(0, 6)}`
-    : 'Local-Offline';
+    localStorage.setItem('cabina_local_alias', localAlias);
+  }, [localAlias]);
 
   const handleSelectExercise = (ex: ConferenceExercise) => {
     setActiveExercise(ex);
@@ -138,23 +103,6 @@ export default function App() {
     await saveEncryptedLocalSession(session);
     const refreshed = await loadAllLocalSessions();
     setLocalSessions(refreshed);
-
-    // Optional real-time anonymized metric sync to Firestore when signed in
-    if (user && session.evaluation) {
-      await syncProgressSummaryToFirestore({
-        userId: user.uid,
-        summaryId: session.id,
-        exerciseId: session.exerciseId,
-        mode: session.mode,
-        sourceLang: session.sourceLang,
-        targetLang: session.targetLang,
-        fluencyScore: session.evaluation.fluencyScore,
-        precisionScore: session.evaluation.precisionScore,
-        intonationScore: session.evaluation.intonationScore,
-        wpm: session.evaluation.estimatedWpm,
-        durationSec: session.durationSec,
-      }).catch(() => {});
-    }
   };
 
   const handleDeleteSession = async (id: string) => {
@@ -172,16 +120,10 @@ export default function App() {
 
   const handleThemeChange = (pref: ThemePreference) => {
     setThemePref(pref);
-    if (user) {
-      void updateUserPreferences(user.uid, { preferredTheme: pref }).catch(() => {});
-    }
   };
 
   const handleUiLangChange = (lang: UiLang) => {
     setUiLang(lang);
-    if (user) {
-      void updateUserPreferences(user.uid, { preferredUiLang: lang }).catch(() => {});
-    }
   };
 
   return (
@@ -377,14 +319,12 @@ export default function App() {
             onSaveSession={handleSaveSession}
           />
 
-          {/* Progress Metrics, PDF Export, Encrypted Local Vault & Cloud Sync */}
+          {/* Progress Metrics, PDF Export, Encrypted Local Vault & Portable Backup */}
           <ProgressAndVault
             t={t}
-            user={user}
-            alias={userAlias}
+            alias={localAlias}
+            onAliasChange={setLocalAlias}
             sessions={localSessions}
-            cloudBackups={cloudBackups}
-            cloudSummaries={cloudSummaries}
             onDeleteSession={handleDeleteSession}
             onRestoreSessions={handleRestoreSessions}
           />

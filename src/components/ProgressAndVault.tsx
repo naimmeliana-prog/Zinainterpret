@@ -1,34 +1,22 @@
-import React, { useState } from 'react';
-import type { User } from 'firebase/auth';
+import React, { useRef, useState } from 'react';
 import {
-  CloudUpload,
+  Download,
   FileDown,
   FileText,
   GitBranch,
   Lock,
-  LogOut,
   Play,
-  RefreshCw,
   Shield,
   Trash2,
+  Upload,
   UserCheck,
 } from 'lucide-react';
-import type { EncryptedBackupDoc, LocalPracticeSession, ProgressSummaryDoc } from '../types';
+import type { EncryptedPortableBackup, LocalPracticeSession } from '../types';
 import type { Translations } from '../i18n/translations';
 import {
   decryptJsonWithPassphrase,
   encryptJsonWithPassphrase,
 } from '../lib/cryptoVault';
-import {
-  loginAnonymously,
-  loginWithGoogle,
-  loginWithUsername,
-  logoutFirebase,
-  registerWithUsername,
-  uploadEncryptedBackupToFirestore,
-  validatePasswordInput,
-  validateUsernameInput,
-} from '../lib/firebase';
 import {
   exportSessionsToJson,
   exportSessionsToMarkdown,
@@ -37,37 +25,41 @@ import {
 
 interface ProgressAndVaultProps {
   t: Translations;
-  user: User | null;
   alias: string;
+  onAliasChange: (nextAlias: string) => void;
   sessions: LocalPracticeSession[];
-  cloudBackups: EncryptedBackupDoc[];
-  cloudSummaries: ProgressSummaryDoc[];
   onDeleteSession: (id: string) => Promise<void>;
   onRestoreSessions: (restored: LocalPracticeSession[]) => Promise<void>;
 }
 
+function validateAliasInput(raw: string): string | null {
+  const clean = raw.trim();
+  if (!clean) return 'Introduce un alias entre 3 y 24 caracteres (letras, números, _ o -).';
+  if (!/^[a-zA-Z0-9_-]{3,24}$/.test(clean)) {
+    return 'Solo se permiten entre 3 y 24 caracteres alfanuméricos, guiones o guiones bajos.';
+  }
+  return null;
+}
+
 export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
   t,
-  user,
   alias,
+  onAliasChange,
   sessions,
-  cloudBackups,
-  cloudSummaries,
   onDeleteSession,
   onRestoreSessions,
 }) => {
-  // Auth state
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState('');
+  // Local private alias state (100% on-device, zero external auth)
+  const [aliasInput, setAliasInput] = useState(alias.startsWith('Anon-') ? '' : alias);
+  const [aliasError, setAliasError] = useState('');
+  const [aliasSaved, setAliasSaved] = useState('');
 
-  // Encrypted Cloud Backup
+  // Encrypted Portable Backup (.enc.json via AES-GCM-256)
   const [backupPassphrase, setBackupPassphrase] = useState('');
   const [backupLabel, setBackupLabel] = useState(`Respaldo-${new Date().toISOString().slice(0, 10)}`);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupStatus, setBackupStatus] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // GitHub Gist / Repo Export Sync
   const [githubToken, setGithubToken] = useState('');
@@ -79,16 +71,6 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
 
   const avgMetrics = (() => {
     const scored = sessions.filter((s) => s.evaluation);
-    if (scored.length === 0 && cloudSummaries.length > 0) {
-      const n = cloudSummaries.length;
-      return {
-        count: n,
-        fluency: Math.round(cloudSummaries.reduce((a, b) => a + b.fluencyScore, 0) / n),
-        precision: Math.round(cloudSummaries.reduce((a, b) => a + b.precisionScore, 0) / n),
-        intonation: Math.round(cloudSummaries.reduce((a, b) => a + b.intonationScore, 0) / n),
-        wpm: Math.round(cloudSummaries.reduce((a, b) => a + b.wpm, 0) / n),
-      };
-    }
     if (scored.length === 0) {
       return { count: sessions.length, fluency: 0, precision: 0, intonation: 0, wpm: 0 };
     }
@@ -102,75 +84,29 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
     };
   })();
 
-  const handleAuthSubmit = async (e: React.FormEvent) => {
+  const handleSaveAlias = (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthError('');
-    const uErr = validateUsernameInput(username);
-    if (uErr) {
-      setAuthError(uErr);
+    setAliasError('');
+    setAliasSaved('');
+    const err = validateAliasInput(aliasInput);
+    if (err) {
+      setAliasError(err);
       return;
     }
-    const pErr = validatePasswordInput(password);
-    if (pErr) {
-      setAuthError(pErr);
-      return;
-    }
-
-    setAuthLoading(true);
-    try {
-      if (authMode === 'register') {
-        await registerWithUsername(username, password);
-      } else {
-        await loginWithUsername(username, password);
-      }
-      setPassword('');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('operation-not-allowed')) {
-        setAuthError(
-          'Habilita el proveedor "Email/Password" en Firebase Console > Authentication > Sign-in method para activar cuentas de usuario sin correo personal.'
-        );
-      } else {
-        setAuthError(msg);
-      }
-    } finally {
-      setAuthLoading(false);
-    }
+    const clean = aliasInput.trim();
+    onAliasChange(clean);
+    setAliasSaved(`Alias local activo: ${clean}`);
   };
 
-  const handleAnonymousAuth = async () => {
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      await loginAnonymously();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('operation-not-allowed') || msg.includes('admin-restricted-operation')) {
-        setAuthError(
-          'Habilita el proveedor "Anonymous" en Firebase Console > Authentication > Sign-in method para el acceso anónimo instantáneo.'
-        );
-      } else {
-        setAuthError(msg);
-      }
-    } finally {
-      setAuthLoading(false);
-    }
+  const handleResetAnonymous = () => {
+    setAliasError('');
+    const anonAlias = `Anon-${Math.random().toString(36).slice(2, 8)}`;
+    setAliasInput('');
+    onAliasChange(anonAlias);
+    setAliasSaved(`Sesión anónima local activada (${anonAlias}).`);
   };
 
-  const handleGoogleAuth = async () => {
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      await loginWithGoogle();
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Error de autenticación');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleUploadEncryptedBackup = async () => {
-    if (!user) return;
+  const handleDownloadEncryptedBackup = async () => {
     if (backupPassphrase.length < 8) {
       setBackupStatus('La clave maestra de cifrado debe tener al menos 8 caracteres.');
       return;
@@ -178,47 +114,62 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
     setBackupBusy(true);
     setBackupStatus('');
     try {
-      // Strip raw audio blobs if oversized to fit well inside 700KB Firestore document limit
       const compactSessions = sessions.map((s) => ({
         ...s,
-        userAudioBase64: s.userAudioBase64 && s.userAudioBase64.length < 180000 ? s.userAudioBase64 : undefined,
         sourceAudioBase64: undefined,
       }));
       const enc = await encryptJsonWithPassphrase(compactSessions, backupPassphrase);
-      await uploadEncryptedBackupToFirestore({
-        userId: user.uid,
-        backupId: `bk-${Date.now()}`,
-        label: backupLabel.trim() || 'Respaldo',
+      const bundle: EncryptedPortableBackup = {
+        label: backupLabel.trim() || 'Respaldo-Cabina',
+        algorithm: 'AES-GCM-256',
+        exportedAt: new Date().toISOString(),
         ciphertext: enc.ciphertext,
         iv: enc.iv,
         salt: enc.salt,
         sessionCount: compactSessions.length,
         byteSize: enc.byteSize,
-      });
-      setBackupStatus('Copia cifrada AES-GCM-256 subida a Firestore correctamente.');
+      };
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${bundle.label.replace(/[^a-zA-Z0-9_-]/g, '_')}.cabina.enc.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupStatus(
+        `Copia cifrada AES-GCM-256 descargada (${compactSessions.length} sesiones).`
+      );
     } catch (err) {
-      setBackupStatus(err instanceof Error ? err.message : 'Error al subir copia cifrada.');
+      setBackupStatus(err instanceof Error ? err.message : 'Error al generar copia cifrada.');
     } finally {
       setBackupBusy(false);
     }
   };
 
-  const handleRestoreBackup = async (bk: EncryptedBackupDoc) => {
+  const handleImportEncryptedFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
     if (backupPassphrase.length < 8) {
-      setBackupStatus('Introduce la clave maestra de cifrado usada para crear esta copia.');
+      setBackupStatus('Introduce primero la clave maestra usada para cifrar el archivo.');
       return;
     }
     setBackupBusy(true);
     setBackupStatus('');
     try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw) as EncryptedPortableBackup;
+      if (!parsed.ciphertext || !parsed.iv || !parsed.salt) {
+        throw new Error('Formato de archivo cifrado no válido.');
+      }
       const decrypted = await decryptJsonWithPassphrase<LocalPracticeSession[]>(
-        { ciphertext: bk.ciphertext, iv: bk.iv, salt: bk.salt },
+        { ciphertext: parsed.ciphertext, iv: parsed.iv, salt: parsed.salt },
         backupPassphrase
       );
       await onRestoreSessions(decrypted);
       setBackupStatus(`Restauradas ${decrypted.length} sesiones en tu bóveda local cifrada.`);
     } catch {
-      setBackupStatus('Clave maestra incorrecta o copia dañada.');
+      setBackupStatus('Clave maestra incorrecta o archivo cifrado dañado.');
     } finally {
       setBackupBusy(false);
     }
@@ -426,9 +377,9 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
         )}
       </div>
 
-      {/* Auth + Encrypted Cloud Backup + GitHub & Vercel Grid */}
+      {/* Local Private Profile + Portable Encrypted Backup & GitHub/Vercel Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Privacy-First Firebase Auth & Cloud Backup */}
+        {/* Local Alias & Portable AES-GCM-256 Backup */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-6 space-y-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -442,177 +393,105 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
             </p>
           </div>
 
-          {!user ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-slate-900 w-fit">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('register')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    authMode === 'register'
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100'
-                      : 'text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  {t.registerBtn}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('login')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    authMode === 'login'
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100'
-                      : 'text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  {t.loginBtn}
-                </button>
-              </div>
-
-              <form onSubmit={(e) => void handleAuthSubmit(e)} className="space-y-3">
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder={t.usernameLabel}
-                  autoComplete="username"
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 min-h-[44px]"
-                />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={t.passwordLabel}
-                  autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 min-h-[44px]"
-                />
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-xs font-medium text-white hover:bg-sky-500 transition-colors disabled:opacity-50 min-h-[44px]"
-                >
-                  {authMode === 'register' ? t.registerBtn : t.loginBtn}
-                </button>
-              </form>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => void handleAnonymousAuth()}
-                  disabled={authLoading}
-                  className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors min-h-[44px]"
-                >
-                  {t.anonymousBtn}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleGoogleAuth()}
-                  disabled={authLoading}
-                  className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors min-h-[44px]"
-                >
-                  {t.googleFallbackBtn}
-                </button>
-              </div>
-
-              {authError && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 leading-relaxed">
-                  {authError}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0B0F17] px-4 py-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" aria-hidden="true" />
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      {alias}
-                    </div>
-                    <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
-                      {user.isAnonymous ? 'Sesión anónima cifrada' : 'Cuenta privada sin email'}
-                    </div>
-                  </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0B0F17] px-4 py-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" aria-hidden="true" />
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {alias}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void logoutFirebase()}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-rose-500 px-2.5 py-2 min-h-[40px]"
-                >
-                  <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>{t.signOutBtn}</span>
-                </button>
-              </div>
-
-              {/* Encrypted Firestore Cloud Backup */}
-              <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {t.cloudBackupTitle}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <input
-                    type="text"
-                    value={backupLabel}
-                    onChange={(e) => setBackupLabel(e.target.value)}
-                    placeholder="Etiqueta de respaldo"
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
-                  />
-                  <input
-                    type="password"
-                    value={backupPassphrase}
-                    onChange={(e) => setBackupPassphrase(e.target.value)}
-                    placeholder={t.backupPassphraseLabel}
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
-                  />
+                <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
+                  {alias.startsWith('Anon-') ? 'Sesión anónima en dispositivo' : 'Perfil local sin datos personales'}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleUploadEncryptedBackup()}
-                  disabled={backupBusy || sessions.length === 0}
-                  className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-xs font-medium text-white hover:bg-sky-500 transition-colors disabled:opacity-45 min-h-[42px]"
-                >
-                  <CloudUpload className="w-4 h-4" aria-hidden="true" />
-                  <span>{t.createEncryptedBackup}</span>
-                </button>
-
-                {backupStatus && (
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400">{backupStatus}</p>
-                )}
-
-                {cloudBackups.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Copias cifradas en tiempo real (Firestore):
-                    </div>
-                    {cloudBackups.map((bk) => (
-                      <div
-                        key={bk.id}
-                        className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs"
-                      >
-                        <div className="min-w-0">
-                          <div className="font-medium text-slate-900 dark:text-slate-100 truncate">
-                            {bk.label}
-                          </div>
-                          <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                            {bk.sessionCount} sesiones · AES-GCM-256
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void handleRestoreBackup(bk)}
-                          disabled={backupBusy}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0 min-h-[36px]"
-                        >
-                          <RefreshCw className="w-3 h-3" aria-hidden="true" />
-                          <span>{t.restoreEncryptedBackup}</span>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
+            <button
+              type="button"
+              onClick={handleResetAnonymous}
+              className="text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-sky-500 px-2.5 py-2 min-h-[38px] whitespace-nowrap shrink-0"
+            >
+              {t.anonymousBtn}
+            </button>
+          </div>
+
+          <form onSubmit={handleSaveAlias} className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={aliasInput}
+              onChange={(e) => setAliasInput(e.target.value)}
+              placeholder={t.usernameLabel}
+              className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3.5 py-2 text-xs sm:text-sm text-slate-900 dark:text-slate-100 min-h-[42px]"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 min-h-[42px]"
+            >
+              {t.loginBtn}
+            </button>
+          </form>
+
+          {aliasError && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">{aliasError}</p>
           )}
+          {aliasSaved && (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">{aliasSaved}</p>
+          )}
+
+          {/* Portable AES-GCM-256 Encrypted File Backup */}
+          <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t.cloudBackupTitle}
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <input
+                type="text"
+                value={backupLabel}
+                onChange={(e) => setBackupLabel(e.target.value)}
+                placeholder="Etiqueta de respaldo"
+                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
+              />
+              <input
+                type="password"
+                value={backupPassphrase}
+                onChange={(e) => setBackupPassphrase(e.target.value)}
+                placeholder={t.backupPassphraseLabel}
+                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => void handleDownloadEncryptedBackup()}
+                disabled={backupBusy || sessions.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-xs font-medium text-white hover:bg-sky-500 transition-colors disabled:opacity-45 min-h-[42px]"
+              >
+                <Download className="w-4 h-4" aria-hidden="true" />
+                <span>{t.createEncryptedBackup}</span>
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={(e) => void handleImportEncryptedFile(e)}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={backupBusy}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-45 min-h-[42px]"
+              >
+                <Upload className="w-4 h-4" aria-hidden="true" />
+                <span>{t.restoreEncryptedBackup}</span>
+              </button>
+            </div>
+
+            {backupStatus && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">{backupStatus}</p>
+            )}
+          </div>
         </div>
 
         {/* GitHub & Vercel Deployment & Sync Card */}

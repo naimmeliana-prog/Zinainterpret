@@ -20,15 +20,7 @@ export class ErrorBoundary extends React.Component<
 
   render() {
     if (this.state.hasError) {
-      let parsedMsg = this.state.message;
-      try {
-        const obj = JSON.parse(this.state.message);
-        if (obj?.error) {
-          parsedMsg = `${obj.error} (${obj.operationType || 'op'} @ ${obj.path || 'firestore'})`;
-        }
-      } catch {
-        // Use raw message
-      }
+      const parsedMsg = this.state.message;
 
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0B0F17] p-6">

@@ -137,44 +137,13 @@ export interface LocalPracticeSession {
   evaluation?: VoiceEvaluation;
 }
 
-export interface UserProfileDoc {
-  ownerId: string;
-  alias: string;
-  preferredUiLang: UiLang;
-  preferredTheme: ThemePreference;
-  defaultSourceLang: SpeechLang;
-  defaultTargetLang: SpeechLang;
-  cloudSyncEnabled: boolean;
-  createdAt?: unknown;
-  updatedAt?: unknown;
-}
-
-export interface ProgressSummaryDoc {
-  id?: string;
-  ownerId: string;
-  exerciseId: string;
-  mode: InterpretingMode;
-  sourceLang: SpeechLang;
-  targetLang: SpeechLang;
-  fluencyScore: number;
-  precisionScore: number;
-  intonationScore: number;
-  wpm: number;
-  durationSec: number;
-  createdAt?: unknown;
-  updatedAt?: unknown;
-}
-
-export interface EncryptedBackupDoc {
-  id?: string;
-  ownerId: string;
+export interface EncryptedPortableBackup {
   label: string;
   algorithm: 'AES-GCM-256';
+  exportedAt: string;
   ciphertext: string;
   iv: string;
   salt: string;
   sessionCount: number;
   byteSize: number;
-  createdAt?: unknown;
-  updatedAt?: unknown;
 }
