@@ -1,11 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Eraser, Sparkles, Undo2 } from 'lucide-react';
-import {
-  EXTENDED_NOTE_SYMBOLS,
-  SYMBOL_CATEGORY_LABELS,
-} from '../data/techniquesAndSymbols';
+import { EXTENDED_NOTE_SYMBOLS } from '../data/techniquesAndSymbols';
+import { SYMBOL_CATEGORY_LABELS_I18N, type Translations } from '../i18n/translations';
 import type { NoteSymbolCategory, SpeechLang, UiLang } from '../types';
-import type { Translations } from '../i18n/translations';
 
 interface SuggestedSymbol {
   concept: string;
@@ -43,6 +40,8 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
   const [activeTab, setActiveTab] = useState<'canvas' | 'structured'>('canvas');
   const [symbolFilter, setSymbolFilter] = useState<NoteSymbolCategory | 'all'>('all');
 
+  const catLabels = SYMBOL_CATEGORY_LABELS_I18N[uiLang];
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -62,12 +61,10 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
     ctx.clearRect(0, 0, w, h);
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.16)';
     ctx.lineWidth = 1;
-    // Rozan vertical left margin line for links & connectors
     ctx.beginPath();
     ctx.moveTo(54, 0);
     ctx.lineTo(54, h);
     ctx.stroke();
-    // Horizontal ruled lines
     for (let y = 36; y < h; y += 32) {
       ctx.beginPath();
       ctx.moveTo(0, y);
@@ -166,7 +163,7 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
 
   const insertRozanTemplate = () => {
     const template =
-      '[Margen: ∵ / ∥ / ∴]\n  Sujeto\n      → Verbo\n          Objeto / Cifra\n────────────────────────\n';
+      '[∵ / ∥ / ∴]\n  S\n      → V\n          O / #\n────────────────────────\n';
     onNotesTextChange(notesText ? `${notesText}\n${template}` : template);
   };
 
@@ -188,12 +185,17 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
       setAiSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
       setLayoutTip(String(data.layoutTip || ''));
     } catch (err) {
-      let msg = err instanceof Error ? err.message : 'No disponible sin conexión';
+      let msg = err instanceof Error ? err.message : 'Error';
       if (msg.trim().startsWith('{')) {
         try {
           const parsed = JSON.parse(msg) as { error?: { code?: number; message?: string } };
           if (parsed?.error?.code === 503) {
-            msg = 'El servicio de IA tiene alta demanda temporal (503). Pulsa Reintentar en unos segundos.';
+            msg =
+              uiLang === 'fr'
+                ? 'Le service IA connaît une forte demande temporaire (503). Réessayez dans quelques secondes.'
+                : uiLang === 'ar'
+                  ? 'تشهد خدمة الذكاء الاصطناعي ضغطاً مؤقتاً (503). أعد المحاولة خلال ثوانٍ.'
+                  : 'El servicio de IA tiene alta demanda temporal (503). Pulsa Reintentar en unos segundos.';
           } else if (parsed?.error?.message) {
             msg = parsed.error.message;
           }
@@ -228,7 +230,7 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            Lienzo Táctil
+            {t.notesTabCanvas}
           </button>
           <button
             type="button"
@@ -239,7 +241,7 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            Esquema S-V-O
+            {t.notesTabStructured}
           </button>
         </div>
       </div>
@@ -256,7 +258,7 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
               className="w-full h-56 touch-none cursor-crosshair block"
             />
             <div className="absolute top-2 left-2 pointer-events-none text-[10px] font-mono text-slate-400">
-              Margen ∵ ∴ ∥
+              {t.notesMarginHint}
             </div>
             <div className="absolute top-2 right-2 flex items-center gap-1.5">
               <button
@@ -264,7 +266,8 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
                 onClick={handleUndo}
                 disabled={history.length === 0}
                 className="p-2 rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 min-h-[38px] min-w-[38px] flex items-center justify-center"
-                title="Deshacer"
+                title={t.notesUndoBtn}
+                aria-label={t.notesUndoBtn}
               >
                 <Undo2 className="w-4 h-4" />
               </button>
@@ -281,13 +284,13 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <span>Escalonamiento diagonal: Margen → Sujeto → Verbo → Objeto</span>
+          <span>{t.notesDiagonalHint}</span>
           <button
             type="button"
             onClick={insertRozanTemplate}
             className="text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline whitespace-nowrap shrink-0"
           >
-            + Plantilla diagonal S-V-O
+            {t.notesTemplateBtn}
           </button>
         </div>
       )}
@@ -317,7 +320,7 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
         </div>
 
         <div className="flex items-center gap-1 overflow-x-auto pb-1">
-          {(Object.keys(SYMBOL_CATEGORY_LABELS) as Array<NoteSymbolCategory | 'all'>).map((cat) => (
+          {(Object.keys(catLabels) as Array<NoteSymbolCategory | 'all'>).map((cat) => (
             <button
               key={cat}
               type="button"
@@ -328,19 +331,19 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
                   : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              {SYMBOL_CATEGORY_LABELS[cat]}
+              {catLabels[cat]}
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto pe-1">
           {filteredSymbols.map((item) => (
             <button
               key={item.id}
               type="button"
               title={`${item.meaning[uiLang]} — ${item.example}`}
               onClick={() => insertSymbol(item.symbol)}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#0B0F17] px-2.5 py-2 text-left hover:border-sky-500/50 transition-colors min-h-[44px]"
+              className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#0B0F17] px-2.5 py-2 text-start hover:border-sky-500/50 transition-colors min-h-[44px]"
             >
               <span className="font-mono text-base font-semibold text-sky-600 dark:text-sky-400 w-7 text-center shrink-0">
                 {item.symbol}
@@ -349,7 +352,7 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
                 <div className="text-xs text-slate-800 dark:text-slate-200 truncate">
                   {item.meaning[uiLang]}
                 </div>
-                <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
+                <div dir="ltr" className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
                   {item.example}
                 </div>
               </div>
@@ -366,7 +369,7 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
               disabled={loadingSymbols}
               className="font-semibold underline hover:no-underline whitespace-nowrap shrink-0"
             >
-              Reintentar
+              {t.retryBtn}
             </button>
           </div>
         )}
@@ -384,7 +387,7 @@ export const ConsecutiveNotePad: React.FC<ConsecutiveNotePadProps> = ({
                   key={`${s.concept}-${idx}`}
                   type="button"
                   onClick={() => insertSymbol(s.symbol || s.abbreviation || s.concept)}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-left hover:bg-sky-500/10 transition-colors min-h-[44px]"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-start hover:bg-sky-500/10 transition-colors min-h-[44px]"
                 >
                   <div className="min-w-0">
                     <div className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">

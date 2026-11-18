@@ -10,19 +10,17 @@ import {
   Upload,
   UserCheck,
 } from 'lucide-react';
-import type { EncryptedPortableBackup, LocalPracticeSession } from '../types';
 import type { Translations } from '../i18n/translations';
-import {
-  decryptJsonWithPassphrase,
-  encryptJsonWithPassphrase,
-} from '../lib/cryptoVault';
+import { decryptJsonWithPassphrase, encryptJsonWithPassphrase } from '../lib/cryptoVault';
 import {
   exportSessionsToJson,
   exportSessionsToMarkdown,
   exportSessionsToPdf,
 } from '../lib/pdfExport';
+import type { EncryptedPortableBackup, LocalPracticeSession, UiLang } from '../types';
 
 interface ProgressAndVaultProps {
+  uiLang: UiLang;
   t: Translations;
   alias: string;
   onAliasChange: (nextAlias: string) => void;
@@ -31,16 +29,17 @@ interface ProgressAndVaultProps {
   onRestoreSessions: (restored: LocalPracticeSession[]) => Promise<void>;
 }
 
-function validateAliasInput(raw: string): string | null {
+function validateAliasInput(raw: string, t: Translations): string | null {
   const clean = raw.trim();
-  if (!clean) return 'Introduce un alias entre 3 y 24 caracteres (letras, números, _ o -).';
+  if (!clean) return t.aliasErrorEmpty;
   if (!/^[a-zA-Z0-9_-]{3,24}$/.test(clean)) {
-    return 'Solo se permiten entre 3 y 24 caracteres alfanuméricos, guiones o guiones bajos.';
+    return t.aliasErrorInvalid;
   }
   return null;
 }
 
 export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
+  uiLang,
   t,
   alias,
   onAliasChange,
@@ -48,19 +47,18 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
   onDeleteSession,
   onRestoreSessions,
 }) => {
-  // Local private alias state (100% on-device, zero external auth)
   const [aliasInput, setAliasInput] = useState(alias.startsWith('Anon-') ? '' : alias);
   const [aliasError, setAliasError] = useState('');
   const [aliasSaved, setAliasSaved] = useState('');
 
-  // Encrypted Portable Backup (.enc.json via AES-GCM-256)
   const [backupPassphrase, setBackupPassphrase] = useState('');
-  const [backupLabel, setBackupLabel] = useState(`Respaldo-${new Date().toISOString().slice(0, 10)}`);
+  const [backupLabel, setBackupLabel] = useState(
+    `Backup-${new Date().toISOString().slice(0, 10)}`
+  );
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupStatus, setBackupStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Audio playback for saved sessions
   const [playingId, setPlayingId] = useState<string | null>(null);
 
   const avgMetrics = (() => {
@@ -72,8 +70,12 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
     return {
       count: sessions.length,
       fluency: Math.round(scored.reduce((a, b) => a + (b.evaluation?.fluencyScore || 0), 0) / n),
-      precision: Math.round(scored.reduce((a, b) => a + (b.evaluation?.precisionScore || 0), 0) / n),
-      intonation: Math.round(scored.reduce((a, b) => a + (b.evaluation?.intonationScore || 0), 0) / n),
+      precision: Math.round(
+        scored.reduce((a, b) => a + (b.evaluation?.precisionScore || 0), 0) / n
+      ),
+      intonation: Math.round(
+        scored.reduce((a, b) => a + (b.evaluation?.intonationScore || 0), 0) / n
+      ),
       wpm: Math.round(scored.reduce((a, b) => a + (b.evaluation?.estimatedWpm || 0), 0) / n),
     };
   })();
@@ -82,14 +84,14 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
     e.preventDefault();
     setAliasError('');
     setAliasSaved('');
-    const err = validateAliasInput(aliasInput);
+    const err = validateAliasInput(aliasInput, t);
     if (err) {
       setAliasError(err);
       return;
     }
     const clean = aliasInput.trim();
     onAliasChange(clean);
-    setAliasSaved(`Alias local activo: ${clean}`);
+    setAliasSaved(`${t.aliasSavedPrefix} ${clean}`);
   };
 
   const handleResetAnonymous = () => {
@@ -97,12 +99,12 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
     const anonAlias = `Anon-${Math.random().toString(36).slice(2, 8)}`;
     setAliasInput('');
     onAliasChange(anonAlias);
-    setAliasSaved(`Sesión anónima local activada (${anonAlias}).`);
+    setAliasSaved(`${t.anonActivatedPrefix} ${anonAlias}`);
   };
 
   const handleDownloadEncryptedBackup = async () => {
     if (backupPassphrase.length < 8) {
-      setBackupStatus('La clave maestra de cifrado debe tener al menos 8 caracteres.');
+      setBackupStatus(t.backupErrPassphrase);
       return;
     }
     setBackupBusy(true);
@@ -114,7 +116,7 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
       }));
       const enc = await encryptJsonWithPassphrase(compactSessions, backupPassphrase);
       const bundle: EncryptedPortableBackup = {
-        label: backupLabel.trim() || 'Respaldo-Cabina',
+        label: backupLabel.trim() || 'Cabina-Backup',
         algorithm: 'AES-GCM-256',
         exportedAt: new Date().toISOString(),
         ciphertext: enc.ciphertext,
@@ -130,11 +132,9 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
       a.download = `${bundle.label.replace(/[^a-zA-Z0-9_-]/g, '_')}.cabina.enc.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setBackupStatus(
-        `Copia cifrada AES-GCM-256 descargada (${compactSessions.length} sesiones).`
-      );
+      setBackupStatus(`${t.backupDownloadedPrefix} (${compactSessions.length})`);
     } catch (err) {
-      setBackupStatus(err instanceof Error ? err.message : 'Error al generar copia cifrada.');
+      setBackupStatus(err instanceof Error ? err.message : t.backupInvalidFile);
     } finally {
       setBackupBusy(false);
     }
@@ -145,7 +145,7 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
     e.target.value = '';
     if (!file) return;
     if (backupPassphrase.length < 8) {
-      setBackupStatus('Introduce primero la clave maestra usada para cifrar el archivo.');
+      setBackupStatus(t.backupErrPassphraseImport);
       return;
     }
     setBackupBusy(true);
@@ -154,16 +154,16 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
       const raw = await file.text();
       const parsed = JSON.parse(raw) as EncryptedPortableBackup;
       if (!parsed.ciphertext || !parsed.iv || !parsed.salt) {
-        throw new Error('Formato de archivo cifrado no válido.');
+        throw new Error(t.backupInvalidFile);
       }
       const decrypted = await decryptJsonWithPassphrase<LocalPracticeSession[]>(
         { ciphertext: parsed.ciphertext, iv: parsed.iv, salt: parsed.salt },
         backupPassphrase
       );
       await onRestoreSessions(decrypted);
-      setBackupStatus(`Restauradas ${decrypted.length} sesiones en tu bóveda local cifrada.`);
+      setBackupStatus(`${t.backupRestoredPrefix} ${decrypted.length} ${t.backupRestoredSuffix}`);
     } catch {
-      setBackupStatus('Clave maestra incorrecta o archivo cifrado dañado.');
+      setBackupStatus(t.backupWrongKey);
     } finally {
       setBackupBusy(false);
     }
@@ -195,7 +195,7 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            onClick={() => exportSessionsToPdf(sessions, alias)}
+            onClick={() => exportSessionsToPdf(sessions, alias, uiLang)}
             disabled={sessions.length === 0}
             className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-xs font-medium text-white hover:bg-sky-500 transition-colors disabled:opacity-45 min-h-[44px]"
           >
@@ -213,7 +213,7 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => exportSessionsToMarkdown(sessions, alias)}
+            onClick={() => exportSessionsToMarkdown(sessions, alias, uiLang)}
             disabled={sessions.length === 0}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3.5 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-45 min-h-[44px]"
           >
@@ -226,33 +226,36 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
       {/* Quantitative Summary Strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-4">
-          <div className="text-xs text-slate-500 dark:text-slate-400">Sesiones cifradas</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {t.metricEncryptedSessions}
+          </div>
           <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1">
             {avgMetrics.count}
           </div>
         </div>
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-4">
-          <div className="text-xs text-slate-500 dark:text-slate-400">{t.fluencyLabel} media</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t.metricAvgFluency}</div>
           <div className="text-2xl font-bold font-mono tabular-nums text-sky-600 dark:text-sky-400 mt-1">
             {avgMetrics.fluency}%
           </div>
         </div>
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-4">
-          <div className="text-xs text-slate-500 dark:text-slate-400">{t.precisionLabel} media</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t.metricAvgPrecision}</div>
           <div className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-1">
             {avgMetrics.precision}%
           </div>
         </div>
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-4">
-          <div className="text-xs text-slate-500 dark:text-slate-400">{t.intonationLabel} media</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t.metricAvgIntonation}</div>
           <div className="text-2xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400 mt-1">
             {avgMetrics.intonation}%
           </div>
         </div>
         <div className="col-span-2 md:col-span-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-4">
-          <div className="text-xs text-slate-500 dark:text-slate-400">Velocidad media</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t.metricAvgSpeed}</div>
           <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1">
-            {avgMetrics.wpm} <span className="text-xs font-normal text-slate-400">PPM</span>
+            {avgMetrics.wpm}{' '}
+            <span className="text-xs font-normal text-slate-400">{t.wpmUnit}</span>
           </div>
         </div>
       </div>
@@ -287,9 +290,11 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
               >
                 <div className="space-y-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <span className="font-mono">{s.mode}</span>
-                    <span aria-hidden="true">·</span>
                     <span className="font-mono">
+                      {s.mode === 'simultaneous' ? t.modeSimultaneous : t.modeConsecutive}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span dir="ltr" className="font-mono">
                       {s.sourceLang.toUpperCase()} → {s.targetLang.toUpperCase()}
                     </span>
                     <span aria-hidden="true">·</span>
@@ -302,8 +307,9 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
                   </div>
                   {s.evaluation && (
                     <div className="text-xs font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-                      Fluidez {s.evaluation.fluencyScore}% · Precisión {s.evaluation.precisionScore}% ·
-                      Entonación {s.evaluation.intonationScore}% · {s.evaluation.estimatedWpm} PPM
+                      {t.fluencyLabel} {s.evaluation.fluencyScore}% · {t.precisionLabel}{' '}
+                      {s.evaluation.precisionScore}% · {t.intonationLabel}{' '}
+                      {s.evaluation.intonationScore}% · {s.evaluation.estimatedWpm} {t.wpmUnit}
                     </div>
                   )}
                 </div>
@@ -316,14 +322,14 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
                       className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[40px]"
                     >
                       <Play className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>{playingId === s.id ? 'Reproduciendo...' : 'Escuchar'}</span>
+                      <span>{playingId === s.id ? t.playingBtn : t.listenBtn}</span>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => void onDeleteSession(s.id)}
                     className="p-2 rounded-lg text-slate-400 hover:text-rose-500 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
-                    aria-label="Eliminar sesión"
+                    aria-label={t.deleteSessionLabel}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -336,7 +342,6 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
 
       {/* Local Private Profile + Portable Encrypted Backup Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Local Alias Card */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-6 space-y-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -358,9 +363,7 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
                   {alias}
                 </div>
                 <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
-                  {alias.startsWith('Anon-')
-                    ? 'Sesión anónima en dispositivo'
-                    : 'Perfil local sin datos personales'}
+                  {alias.startsWith('Anon-') ? t.anonDeviceStatus : t.localAliasStatus}
                 </div>
               </div>
             </div>
@@ -407,8 +410,7 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Empaqueta todo tu historial cifrado con clave maestra PBKDF2 + AES-GCM-256 para
-              trasladarlo de forma privada entre dispositivos sin servidores externos.
+              {t.cloudBackupSubtitle}
             </p>
           </div>
 
@@ -417,7 +419,7 @@ export const ProgressAndVault: React.FC<ProgressAndVaultProps> = ({
               type="text"
               value={backupLabel}
               onChange={(e) => setBackupLabel(e.target.value)}
-              placeholder="Etiqueta de respaldo"
+              placeholder={t.backupLabelPlaceholder}
               className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[42px]"
             />
             <input

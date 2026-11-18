@@ -1,4 +1,5 @@
 import React from 'react';
+import type { Translations } from '../i18n/translations';
 
 interface State {
   hasError: boolean;
@@ -6,10 +7,10 @@ interface State {
 }
 
 export class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
+  { children: React.ReactNode; t?: Translations },
   State
 > {
-  constructor(props: { children: React.ReactNode }) {
+  constructor(props: { children: React.ReactNode; t?: Translations }) {
     super(props);
     this.state = { hasError: false, message: '' };
   }
@@ -26,7 +27,7 @@ export class ErrorBoundary extends React.Component<
         <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0B0F17] p-6">
           <div className="max-w-lg w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-8 space-y-4">
             <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-              Se ha producido una interrupción en la sesión
+              {this.props.t?.errorBoundaryTitle || 'Se ha producido una interrupción en la sesión'}
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed break-words">
               {parsedMsg}
@@ -36,7 +37,7 @@ export class ErrorBoundary extends React.Component<
               onClick={() => window.location.reload()}
               className="px-4 py-2.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-500 transition-colors"
             >
-              Recargar estudio
+              {this.props.t?.errorBoundaryReload || 'Recargar estudio'}
             </button>
           </div>
         </div>

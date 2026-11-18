@@ -12,15 +12,23 @@ import {
   Volume2,
 } from 'lucide-react';
 import { SPEECH_LANGUAGES } from '../data/curriculumAndRepos';
+import {
+  SPEECH_LANGUAGE_NAMES,
+  SPEECH_LANGUAGE_NATIVE,
+  VOICE_PERSONA_OPTIONS,
+  VOICE_STYLE_OPTIONS,
+  type Translations,
+} from '../i18n/translations';
 import type {
   ConferenceExercise,
+  ConferenceVoiceName,
+  ConferenceVoiceStyle,
   InterpretingMode,
   LocalPracticeSession,
   SpeechLang,
   UiLang,
   VoiceEvaluation,
 } from '../types';
-import type { Translations } from '../i18n/translations';
 import { ConsecutiveNotePad } from './ConsecutiveNotePad';
 
 interface InterpretingStudioProps {
@@ -48,6 +56,36 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+function pickNaturalBrowserVoice(
+  voices: SpeechSynthesisVoice[],
+  lang: SpeechLang
+): SpeechSynthesisVoice | undefined {
+  const prefix = lang === 'es' ? 'es' : lang === 'fr' ? 'fr' : 'ar';
+  const matching = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix));
+  if (matching.length === 0) return undefined;
+
+  const scoreVoice = (v: SpeechSynthesisVoice): number => {
+    const name = v.name.toLowerCase();
+    let score = 0;
+    if (name.includes('natural')) score += 50;
+    if (name.includes('online')) score += 40;
+    if (name.includes('neural') || name.includes('wavenet')) score += 35;
+    if (name.includes('google')) score += 25;
+    if (name.includes('premium') || name.includes('enhanced')) score += 20;
+    if (
+      /monica|mónica|jorge|elena|lucia|lucía|amélie|amelie|thomas|aurelie|aurélie|maged|laila|tarik|salma|hoda/.test(
+        name
+      )
+    ) {
+      score += 15;
+    }
+    if (!v.localService) score += 10;
+    return score;
+  };
+
+  return [...matching].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
+}
+
 export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   uiLang,
   t,
@@ -60,13 +98,20 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   onSaveSession,
 }) => {
   const [mode, setMode] = useState<InterpretingMode>(exercise.mode);
-  const [customScript, setCustomScript] = useState(exercise.scripts[sourceLang] || exercise.scripts.en);
+  const [customScript, setCustomScript] = useState(
+    exercise.scripts[sourceLang] || exercise.scripts.es
+  );
   const [showScriptText, setShowScriptText] = useState(false);
+
+  // Human Conference Voice Persona & Cadence
+  const [voiceName, setVoiceName] = useState<ConferenceVoiceName>('Zephyr');
+  const [voiceStyle, setVoiceStyle] = useState<ConferenceVoiceStyle>('natural');
 
   // Source Audio Playback
   const [sourceAudioUrl, setSourceAudioUrl] = useState<string>('');
   const [sourceAudioBase64, setSourceAudioBase64] = useState<string>('');
   const [synthesizing, setSynthesizing] = useState(false);
+  const [synthReadyNotice, setSynthReadyNotice] = useState(false);
   const [synthError, setSynthError] = useState('');
   const [isPlayingSource, setIsPlayingSource] = useState(false);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
@@ -104,12 +149,23 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
 
   useEffect(() => {
     setMode(exercise.mode);
-    setCustomScript(exercise.scripts[sourceLang] || exercise.scripts.en);
+    setCustomScript(exercise.scripts[sourceLang] || exercise.scripts.es);
     setSourceAudioUrl('');
     setSourceAudioBase64('');
+    setSynthReadyNotice(false);
+    setSynthError('');
+    setIsPlayingSource(false);
     setEvaluation(null);
     setSavedNotice('');
+    window.speechSynthesis?.cancel();
   }, [exercise, sourceLang]);
+
+  useEffect(() => {
+    setSourceAudioUrl('');
+    setSourceAudioBase64('');
+    setSynthReadyNotice(false);
+    setIsPlayingSource(false);
+  }, [voiceName, voiceStyle]);
 
   useEffect(() => {
     if (requestedMode) {
@@ -124,6 +180,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   }, [playbackRate]);
 
   useEffect(() => {
+    window.speechSynthesis?.getVoices?.();
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -157,6 +214,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   const synthesizeOriginalSpeech = async () => {
     setSynthesizing(true);
     setSynthError('');
+    setSynthReadyNotice(false);
     try {
       const res = await fetch('/api/gemini/tts', {
         method: 'POST',
@@ -164,7 +222,8 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
         body: JSON.stringify({
           text: customScript,
           lang: sourceLang,
-          voiceName: sourceLang === 'fr' || sourceLang === 'it' ? 'Kore' : 'Charon',
+          voiceName,
+          style: voiceStyle,
         }),
       });
       const data = await res.json();
@@ -172,12 +231,10 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
       const dataUrl = `data:${data.mimeType || 'audio/wav'};base64,${data.audioBase64}`;
       setSourceAudioUrl(dataUrl);
       setSourceAudioBase64(data.audioBase64);
+      setSynthReadyNotice(true);
     } catch (err) {
-      // Offline / fallback Web Speech API notification
       setSynthError(
-        err instanceof Error
-          ? `${err.message} — Puedes usar reproducción local del navegador.`
-          : 'Modo local disponible.'
+        err instanceof Error ? `${err.message} — ${t.speechFallbackHint}` : t.speechFallbackHint
       );
     } finally {
       setSynthesizing(false);
@@ -197,7 +254,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
       return;
     }
 
-    // Offline browser speechSynthesis fallback
+    // Offline browser speechSynthesis fallback preferring highest-quality natural voices
     if ('speechSynthesis' in window) {
       if (isPlayingSource) {
         window.speechSynthesis.cancel();
@@ -208,16 +265,16 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
       const utter = new SpeechSynthesisUtterance(customScript);
       const langMap: Record<SpeechLang, string> = {
         es: 'es-ES',
-        en: 'en-GB',
         fr: 'fr-FR',
-        de: 'de-DE',
-        it: 'it-IT',
-        pt: 'pt-PT',
         ar: 'ar-SA',
-        zh: 'zh-CN',
       };
-      utter.lang = langMap[sourceLang] || 'en-US';
+      utter.lang = langMap[sourceLang] || 'es-ES';
+      const bestVoice = pickNaturalBrowserVoice(window.speechSynthesis.getVoices(), sourceLang);
+      if (bestVoice) {
+        utter.voice = bestVoice;
+      }
       utter.rate = playbackRate;
+      utter.pitch = 0.98;
       utter.onend = () => setIsPlayingSource(false);
       utter.onerror = () => setIsPlayingSource(false);
       setIsPlayingSource(true);
@@ -311,9 +368,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
       }, 1000);
     } catch (err) {
       setRecordError(
-        err instanceof Error
-          ? `Acceso al micrófono denegado o no disponible (${err.message}). Puedes introducir tu interpretación en texto abajo para evaluarla.`
-          : 'No se pudo iniciar el micrófono.'
+        err instanceof Error ? `${t.micUnavailableError} (${err.message})` : t.micUnavailableError
       );
     }
   };
@@ -361,10 +416,10 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error en análisis');
+      if (!res.ok) throw new Error(data.error || 'Error');
       setEvaluation(data as VoiceEvaluation);
     } catch (err) {
-      setEvalError(err instanceof Error ? err.message : 'No se pudo completar el análisis.');
+      setEvalError(err instanceof Error ? err.message : 'Error');
     } finally {
       setAnalyzing(false);
     }
@@ -417,7 +472,9 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
               <span aria-hidden="true">·</span>
               <span className="font-mono">{exercise.difficulty}</span>
               <span aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums">{exercise.targetWpm} PPM</span>
+              <span className="font-mono tabular-nums">
+                {exercise.targetWpm} {t.wpmUnit}
+              </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-100">
               {exercise.titles[uiLang]}
@@ -450,7 +507,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
           </div>
         </div>
 
-        {/* Language Pair & Booth Parameters */}
+        {/* Language Pair (ES / FR / AR) & Booth Parameters */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
           <label className="space-y-1.5">
             <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -463,7 +520,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
             >
               {SPEECH_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
-                  {l.label} ({l.native})
+                  {SPEECH_LANGUAGE_NAMES[uiLang][l.code]} ({SPEECH_LANGUAGE_NATIVE[l.code]})
                 </option>
               ))}
             </select>
@@ -480,7 +537,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
             >
               {SPEECH_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
-                  {l.label} ({l.native})
+                  {SPEECH_LANGUAGE_NAMES[uiLang][l.code]} ({SPEECH_LANGUAGE_NATIVE[l.code]})
                 </option>
               ))}
             </select>
@@ -488,7 +545,8 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
 
           <label className="space-y-1.5">
             <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-              {t.playbackSpeed}: <span className="font-mono tabular-nums">{playbackRate.toFixed(2)}x</span>
+              {t.playbackSpeed}:{' '}
+              <span className="font-mono tabular-nums">{playbackRate.toFixed(2)}x</span>
             </span>
             <input
               type="range"
@@ -518,28 +576,68 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
         </div>
       </div>
 
-      {/* Two-Zone Studio Workspace: 60% Booth Audio Stage / 40% Consecutive Notes or Terminology */}
+      {/* Two-Zone Studio Workspace: Booth Audio Stage / Consecutive Notes or Terminology */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Zone: Audio Console & A/B Comparison */}
         <div className="lg:col-span-7 space-y-6">
-          {/* Source Speech Deck */}
+          {/* Source Conference Audio Deck */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <Volume2 className="w-4 h-4 text-sky-500" aria-hidden="true" />
-                <span>Canal Original ({sourceLang.toUpperCase()})</span>
+                <span>
+                  {t.originalChannelLabel} ({SPEECH_LANGUAGE_NAMES[uiLang][sourceLang]})
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => setShowScriptText((v) => !v)}
                 className="text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline min-h-[36px] px-2"
               >
-                {showScriptText ? 'Ocultar transcripción guía' : 'Ver / editar texto del discurso'}
+                {showScriptText ? t.hideScriptBtn : t.showScriptBtn}
               </button>
+            </div>
+
+            {/* Human Conference Voice & Natural Cadence Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <label className="space-y-1">
+                <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                  {t.voicePersonaLabel}
+                </span>
+                <select
+                  value={voiceName}
+                  onChange={(e) => setVoiceName(e.target.value as ConferenceVoiceName)}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[40px]"
+                >
+                  {VOICE_PERSONA_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.labels[uiLang]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1">
+                <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                  {t.voiceStyleLabel}
+                </span>
+                <select
+                  value={voiceStyle}
+                  onChange={(e) => setVoiceStyle(e.target.value as ConferenceVoiceStyle)}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[40px]"
+                >
+                  {VOICE_STYLE_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.labels[uiLang]}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             {showScriptText && (
               <textarea
+                dir={sourceLang === 'ar' ? 'rtl' : 'ltr'}
                 value={customScript}
                 onChange={(e) => setCustomScript(e.target.value)}
                 rows={4}
@@ -581,6 +679,12 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
               )}
             </div>
 
+            {synthReadyNotice && !synthError && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                {t.conferenceAudioReady}
+              </p>
+            )}
+
             {synthError && (
               <p className="text-xs text-amber-600 dark:text-amber-400">{synthError}</p>
             )}
@@ -591,7 +695,9 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <Activity className="w-4 h-4 text-emerald-500" aria-hidden="true" />
-                <span>Cabina del Intérprete ({targetLang.toUpperCase()})</span>
+                <span>
+                  {t.interpreterBoothLabel} ({SPEECH_LANGUAGE_NAMES[uiLang][targetLang]})
+                </span>
               </div>
               <span className="font-mono text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">
                 {formatTimer(recordingSec)}
@@ -663,7 +769,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 min-h-[44px]"
               >
                 <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Reiniciar</span>
+                <span>{t.resetRecordingBtn}</span>
               </button>
             </div>
 
@@ -676,13 +782,14 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
             {/* Text fallback / manual transcript for evaluation without mic */}
             <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-800">
               <label className="block text-xs text-slate-500 dark:text-slate-400">
-                Transcripción manual opcional (si practicas sin micrófono o deseas corregir texto):
+                {t.manualTranscriptLabel}
               </label>
               <textarea
+                dir={targetLang === 'ar' ? 'rtl' : 'ltr'}
                 value={userTextOverride}
                 onChange={(e) => setUserTextOverride(e.target.value)}
                 rows={2}
-                placeholder={`Escribe o dicta tu interpretación en ${targetLang.toUpperCase()}...`}
+                placeholder={`${t.manualTranscriptPlaceholder} ${SPEECH_LANGUAGE_NAMES[uiLang][targetLang]}...`}
                 className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
               />
             </div>
@@ -702,7 +809,9 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
               <button
                 type="button"
                 onClick={() => void handleSaveToLocalVault()}
-                disabled={savingVault || (!recordedBase64 && !notesText && !evaluation && !userTextOverride)}
+                disabled={
+                  savingVault || (!recordedBase64 && !notesText && !evaluation && !userTextOverride)
+                }
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-45 min-h-[44px]"
               >
                 <Save className="w-4 h-4 text-sky-500" aria-hidden="true" />
@@ -755,7 +864,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
                   <div className="text-xs text-slate-500 dark:text-slate-400">{t.wpmLabel}</div>
                   <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1">
                     {evaluation.estimatedWpm}
-                    <span className="text-xs font-normal text-slate-400"> PPM</span>
+                    <span className="text-xs font-normal text-slate-400"> {t.wpmUnit}</span>
                   </div>
                 </div>
               </div>
@@ -763,7 +872,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
               <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                 <div>
                   <span className="font-semibold text-slate-900 dark:text-slate-100">
-                    Transcripción detectada:{' '}
+                    {t.detectedTranscriptLabel}{' '}
                   </span>
                   <span className="italic">“{evaluation.transcript}”</span>
                 </div>
@@ -792,7 +901,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
                   <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
                     {t.recommendationsLabel}
                   </div>
-                  <ul className="space-y-1.5 text-sm text-slate-600 dark:text-slate-300 list-disc pl-5">
+                  <ul className="space-y-1.5 text-sm text-slate-600 dark:text-slate-300 list-disc ps-5">
                     {evaluation.actionableRecommendations.map((rec, i) => (
                       <li key={i}>{rec}</li>
                     ))}
@@ -818,7 +927,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
           ) : (
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-5 space-y-4">
               <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Glosario de Cabina y Estrategia Simultánea
+                {t.glossaryTitle}
               </h3>
               <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                 {exercise.objectives[uiLang]}
@@ -830,23 +939,26 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
                     <span className="font-medium text-slate-900 dark:text-slate-100">
                       {item.term}
                     </span>
-                    <span className="text-slate-600 dark:text-slate-400 text-right">
-                      {item.note}
+                    <span className="text-slate-600 dark:text-slate-400 text-end">
+                      {item.note[uiLang]}
                     </span>
                   </div>
                 ))}
               </div>
 
               <div className="space-y-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                <div>1. Espera {decalageSec}s para captar la unidad mínima de sentido (S+V).</div>
-                <div>2. Transforma subordinadas largas en oraciones coordinadas cortas.</div>
-                <div>3. Anota cifras y siglas breves mientras escuchas en el micrófono.</div>
+                <div>
+                  {t.glossaryTip1Prefix} {decalageSec}
+                  {t.glossaryTip1Suffix}
+                </div>
+                <div>{t.glossaryTip2}</div>
+                <div>{t.glossaryTip3}</div>
                 <div className="pt-2">
                   <a
                     href="#techniques"
                     className="font-medium text-sky-600 dark:text-sky-400 hover:underline"
                   >
-                    Ver manual completo de técnicas (Simultánea y Rozan) →
+                    {t.glossaryManualLink}
                   </a>
                 </div>
               </div>

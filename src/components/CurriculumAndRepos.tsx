@@ -47,7 +47,7 @@ export const CurriculumAndRepos: React.FC<CurriculumAndReposProps> = ({
                 key={ex.id}
                 type="button"
                 onClick={() => onSelectExercise(ex)}
-                className={`group text-left rounded-2xl border p-6 transition-colors flex flex-col justify-between gap-4 ${
+                className={`group text-start rounded-2xl border p-6 transition-colors flex flex-col justify-between gap-4 ${
                   isSelected
                     ? 'border-sky-500 bg-sky-500/5 dark:bg-sky-500/10'
                     : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] hover:border-slate-300 dark:hover:border-slate-700'
@@ -75,10 +75,10 @@ export const CurriculumAndRepos: React.FC<CurriculumAndReposProps> = ({
 
                 <div className="flex items-center justify-between pt-3 border-t border-slate-200/80 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                   <span>
-                    {ex.difficulty} · {ex.targetWpm} PPM · {ex.durationLabel}
+                    {ex.difficulty} · {ex.targetWpm} {t.wpmUnit} · {ex.durationLabel}
                   </span>
                   <span className="font-sans font-medium text-sky-600 dark:text-sky-400">
-                    {isSelected ? 'En estudio' : 'Cargar ejercicio →'}
+                    {isSelected ? t.exerciseActiveBadge : t.loadExerciseBtn}
                   </span>
                 </div>
               </button>
@@ -93,25 +93,19 @@ export const CurriculumAndRepos: React.FC<CurriculumAndReposProps> = ({
           <div className="relative h-52 bg-slate-900">
             <img
               src="/src/assets/images/consecutive_notepad_desk_1794957054053.jpg"
-              alt="Cuaderno de toma de notas consecutiva con símbolos estenográficos"
+              alt={t.editorialRozanTitle}
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
             <div className="absolute bottom-4 left-5 right-5 text-white">
-              <div className="text-xs text-slate-300 mb-1">Método Rozan & Matyssek</div>
-              <div className="text-lg font-semibold">Toma de notas orientada al sentido</div>
+              <div className="text-xs text-slate-300 mb-1">{t.editorialRozanTag}</div>
+              <div className="text-lg font-semibold">{t.editorialRozanTitle}</div>
             </div>
           </div>
           <div className="p-5 text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-2">
-            <p>
-              La verticalidad y el desplazamiento diagonal permiten leer la estructura lógica de un
-              discurso de un vistazo sin descifrar palabras sueltas.
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Transposición de ideas · Abreviación · Conectores al margen izquierdo · Negación y
-              énfasis
-            </p>
+            <p>{t.editorialRozanDesc}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t.editorialRozanTags}</p>
           </div>
         </div>
 
@@ -119,26 +113,19 @@ export const CurriculumAndRepos: React.FC<CurriculumAndReposProps> = ({
           <div className="relative h-52 bg-slate-900">
             <img
               src="/src/assets/images/eu_parliament_hemicycle_1794957061994.jpg"
-              alt="Hemiciclo parlamentario europeo con cabinas de interpretación simultánea"
+              alt={t.editorialReposTitle}
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
             <div className="absolute bottom-4 left-5 right-5 text-white">
-              <div className="text-xs text-slate-300 mb-1">Práctica con material real</div>
-              <div className="text-lg font-semibold">
-                Repositorios de Naciones Unidas y Unión Europea
-              </div>
+              <div className="text-xs text-slate-300 mb-1">{t.editorialReposTag}</div>
+              <div className="text-lg font-semibold">{t.editorialReposTitle}</div>
             </div>
           </div>
           <div className="p-5 text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-2">
-            <p>
-              Combina los ejercicios guiados de esta cabina con discursos reales de la ONU (DGACM)
-              y la Comisión Europea (DG SCIC) para consolidar tu velocidad en condiciones reales.
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              UN Web TV · UNTERM · DG SCIC Speech Repository · IATE · Facultades EMCI
-            </p>
+            <p>{t.editorialReposDesc}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t.editorialReposTags}</p>
           </div>
         </div>
       </section>
@@ -158,7 +145,7 @@ export const CurriculumAndRepos: React.FC<CurriculumAndReposProps> = ({
           <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-slate-900 self-start overflow-x-auto max-w-full">
             {(
               [
-                { id: 'all', label: 'Todos' },
+                { id: 'all', label: t.repoAll },
                 { id: 'un', label: t.repoUn },
                 { id: 'eu', label: t.repoEu },
                 { id: 'universities', label: t.repoUniversities },

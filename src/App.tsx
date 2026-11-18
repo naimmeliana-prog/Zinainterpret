@@ -22,10 +22,14 @@ import { OfflineBanner, PWAInstallButton } from './components/PWAInstallButton';
 import { ProgressAndVault } from './components/ProgressAndVault';
 import { TechniquesAndManual } from './components/TechniquesAndManual';
 
+function isValidLang(val: string | null): val is UiLang {
+  return val === 'es' || val === 'fr' || val === 'ar';
+}
+
 export default function App() {
   const [uiLang, setUiLang] = useState<UiLang>(() => {
-    const saved = localStorage.getItem('cabina_ui_lang') as UiLang | null;
-    return saved && saved in TRANSLATIONS ? saved : 'es';
+    const saved = localStorage.getItem('cabina_ui_lang');
+    return isValidLang(saved) ? saved : 'es';
   });
 
   const [themePref, setThemePref] = useState<ThemePreference>(() => {
@@ -37,7 +41,7 @@ export default function App() {
   const [requestedStudioMode, setRequestedStudioMode] = useState<
     { mode: InterpretingMode; tick: number } | undefined
   >(undefined);
-  const [sourceLang, setSourceLang] = useState<SpeechLang>('en');
+  const [sourceLang, setSourceLang] = useState<SpeechLang>('fr');
   const [targetLang, setTargetLang] = useState<SpeechLang>('es');
 
   // Local Encrypted Vault & Private Alias State
@@ -68,9 +72,11 @@ export default function App() {
     return () => mq.removeEventListener('change', applyTheme);
   }, [themePref]);
 
+  // Apply UI language and RTL direction for Arabic
   useEffect(() => {
     localStorage.setItem('cabina_ui_lang', uiLang);
     document.documentElement.lang = uiLang;
+    document.documentElement.dir = uiLang === 'ar' ? 'rtl' : 'ltr';
   }, [uiLang]);
 
   // Load encrypted sessions from IndexedDB on boot
@@ -127,7 +133,7 @@ export default function App() {
   };
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary t={t}>
       <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 pb-20 md:pb-10 transition-colors">
         {/* Strict 3-Zone Top Bar Contract */}
         <header className="sticky top-0 z-30 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-[#0B0F17]/90 backdrop-blur-md">
@@ -140,7 +146,7 @@ export default function App() {
             </a>
 
             <nav
-              aria-label="Navegación principal"
+              aria-label={t.navAriaLabel}
               className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300"
             >
               <a
@@ -232,7 +238,7 @@ export default function App() {
               </div>
 
               <select
-                aria-label="Idioma de la interfaz"
+                aria-label={t.uiLangAriaLabel}
                 value={uiLang}
                 onChange={(e) => handleUiLangChange(e.target.value as UiLang)}
                 className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#131A26] px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 min-h-[40px]"
@@ -244,7 +250,7 @@ export default function App() {
                 ))}
               </select>
 
-              <PWAInstallButton label={t.installApp} />
+              <PWAInstallButton label={t.installApp} t={t} />
             </div>
           </div>
 
@@ -252,7 +258,7 @@ export default function App() {
           <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
             <div className="lg:col-span-6 flex flex-col justify-between gap-6 py-2">
               <div className="space-y-4">
-                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-[1.12] text-balance">
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-[1.15] text-balance">
                   {t.heroTitle}
                 </h1>
                 <p className="text-base text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl">
@@ -283,14 +289,14 @@ export default function App() {
             <div className="lg:col-span-6 relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-900 min-h-[260px]">
               <img
                 src="/src/assets/images/hero_interpreting_booth_1794957054825.jpg"
-                alt="Cabina de interpretación simultánea en conferencia internacional"
+                alt={t.heroImageAlt}
                 referrerPolicy="no-referrer"
                 className="w-full h-full lg:h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
               <div className="absolute bottom-4 left-5 right-5 text-white flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-medium">Estudio de Cabina Dual · 8 Idiomas</span>
-                <span className="font-mono text-slate-300">AES-GCM-256 · Offline PWA</span>
+                <span className="font-medium">{t.heroBoothBadge}</span>
+                <span className="font-mono text-slate-300">{t.heroTechBadge}</span>
               </div>
             </div>
           </section>
@@ -303,8 +309,8 @@ export default function App() {
             onSelectExercise={handleSelectExercise}
           />
 
-          {/* Expanded Technical Manual: Simultaneous, Consecutive, Worked Rozan Notebooks & 36 Symbols */}
-          <TechniquesAndManual uiLang={uiLang} onJumpToStudio={handleJumpToStudio} />
+          {/* Expanded Technical Manual: Simultaneous, Consecutive, Worked Rozan Notebooks & 84 Symbols */}
+          <TechniquesAndManual uiLang={uiLang} t={t} onJumpToStudio={handleJumpToStudio} />
 
           {/* Active Interpreting Booth Studio */}
           <InterpretingStudio
@@ -321,6 +327,7 @@ export default function App() {
 
           {/* Progress Metrics, PDF Export, Encrypted Local Vault & Portable Backup */}
           <ProgressAndVault
+            uiLang={uiLang}
             t={t}
             alias={localAlias}
             onAliasChange={setLocalAlias}
@@ -332,13 +339,15 @@ export default function App() {
 
         {/* Quiet Footer */}
         <footer className="max-w-7xl mx-auto px-4 sm:px-6 mt-16 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <span>Cabina · {t.openSourceNotice}</span>
+          <span>
+            {t.brand} · {t.openSourceNotice}
+          </span>
           <span>{t.privacyNotice}</span>
         </footer>
 
         {/* Mobile Bottom Thumb-Zone Navigation (4 destinations, 64px <= 15% viewport cap) */}
         <nav
-          aria-label="Navegación móvil"
+          aria-label={t.navMobileAriaLabel}
           className="md:hidden fixed bottom-0 left-0 right-0 z-30 h-16 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0B0F17]/95 backdrop-blur-md grid grid-cols-4 items-center"
         >
           <a

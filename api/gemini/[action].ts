@@ -29,7 +29,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     if (action === 'tts') {
       const audio = await generateConferenceSpeechAudio({
         text: String(body.text || ''),
-        lang: String(body.lang || 'en'),
+        lang: String(body.lang || 'fr'),
         voiceName: typeof body.voiceName === 'string' ? body.voiceName : undefined,
         style: typeof body.style === 'string' ? body.style : undefined,
       });
@@ -42,7 +42,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         mimeType: typeof body.mimeType === 'string' ? body.mimeType : undefined,
         userTextOverride: typeof body.userTextOverride === 'string' ? body.userTextOverride : undefined,
         sourceTranscript: String(body.sourceTranscript || ''),
-        sourceLang: String(body.sourceLang || 'en'),
+        sourceLang: String(body.sourceLang || 'fr'),
         targetLang: String(body.targetLang || 'es'),
         uiLang: String(body.uiLang || 'es'),
         mode: body.mode === 'consecutive' ? 'consecutive' : 'simultaneous',
@@ -55,7 +55,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     if (action === 'note-symbols') {
       const result = await suggestNoteSymbols({
         excerpt: String(body.excerpt || ''),
-        sourceLang: String(body.sourceLang || 'en'),
+        sourceLang: String(body.sourceLang || 'fr'),
         uiLang: String(body.uiLang || 'es'),
       });
       return res.status(200).json(result);

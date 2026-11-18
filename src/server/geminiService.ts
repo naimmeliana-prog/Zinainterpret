@@ -1,6 +1,7 @@
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 
 let cachedAi: GoogleGenAI | null = null;
+let cachedTtsAi: GoogleGenAI | null = null;
 
 export class GeminiServiceError extends Error {
   status: number;
@@ -29,6 +30,26 @@ export function getGeminiClient(): GoogleGenAI {
   return cachedAi;
 }
 
+export function getTtsGeminiClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new GeminiServiceError('GEMINI_API_KEY is not configured in the server environment.', 500);
+  }
+  if (!cachedTtsAi) {
+    // @google/genai 3.4 defaults to v1; speechConfig and speechMetadata require v1beta
+    cachedTtsAi = new GoogleGenAI({
+      apiKey,
+      apiVersion: 'v1beta',
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+  }
+  return cachedTtsAi;
+}
+
 function parseUpstreamError(err: unknown): { code: number; message: string; transient: boolean } {
   const raw = err instanceof Error ? err.message : String(err || 'Upstream error');
   let code = 500;
@@ -50,7 +71,6 @@ function parseUpstreamError(err: unknown): { code: number; message: string; tran
       if (typeof parsed.error.status === 'string') statusStr = parsed.error.status;
     }
   } catch {
-    // Non-JSON error message; inspect raw string
     const match = raw.match(/"code"\s*:\s*(\d{3})/);
     if (match) code = Number(match[1]);
   }
@@ -88,7 +108,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 async function withTransientRetry<T>(
   fn: () => Promise<T>,
   delaysMs: number[] = [400],
-  timeoutMs = 15000,
+  timeoutMs = 18000,
   label = 'Gemini'
 ): Promise<T> {
   let lastErr: unknown;
@@ -155,50 +175,130 @@ export interface EvaluationResult {
   }>;
 }
 
+function buildHumanConferenceVoiceDirection(
+  lang: string,
+  deliveryStyle: string
+): { stylePrompt: string; useBreathCues: boolean } {
+  const normalizedLang = lang === 'fr' || lang === 'ar' ? lang : 'es';
+
+  const langVoiceTrait: Record<'es' | 'fr' | 'ar', string> = {
+    es: 'Native Spanish speaker speaking authentically with warm chest resonance, natural Iberian or international diplomatic accent, subtle micro-variations in pitch and tempo, organic pauses to take a quiet breath between clauses, zero synthetic flatness or robotic cadence.',
+    fr: 'Native French speaker speaking spontaneously at an international assembly with warm human timbre, smooth natural liaison, authentic French prosody, gentle breathing pauses between thoughts, expressive emphasis, never mechanical or synthetic.',
+    ar: 'Native Arabic speaker delivering Modern Standard Arabic naturally with resonant human warmth, authentic Arabic articulation and organic phrasing, subtle breathing pauses at sentence boundaries, lively natural inflection, zero robotic monotone.',
+  };
+
+  if (deliveryStyle === 'measured') {
+    return {
+      stylePrompt: `${langVoiceTrait[normalizedLang]} Unhurried, thoughtful live consecutive speech with natural pauses for breathing and clear phrase endings as if speaking live to interpreters in the room.`,
+      useBreathCues: true,
+    };
+  }
+
+  if (deliveryStyle === 'diplomatic') {
+    return {
+      stylePrompt: `${langVoiceTrait[normalizedLang]} Warm, earnest, persuasive human delegate addressing colleagues in person without reading stiffly off a teleprompter.`,
+      useBreathCues: true,
+    };
+  }
+
+  return {
+    stylePrompt: `${langVoiceTrait[normalizedLang]} Natural conversational live human speech with spontaneous rhythm, genuine human breath pacing, soft organic inflection, and realistic human presence.`,
+    useBreathCues: true,
+  };
+}
+
+function shapeTextWithNaturalBreathing(text: string): string {
+  // Add natural breath marks between distinct sentences for gemini-3.8-flash-tts
+  // so long plenary paragraphs sound genuinely human rather than breathless AI readout.
+  const sentences = text
+    .split(/(?<=[.!?؟])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (sentences.length <= 1) return text;
+  return sentences
+    .map((sentence, idx) => (idx > 0 && idx % 1 === 0 ? `<breath> ${sentence}` : sentence))
+    .join(' ');
+}
+
 export async function generateConferenceSpeechAudio(params: {
   text: string;
   lang: string;
   voiceName?: string;
   style?: string;
 }) {
-  const ai = getGeminiClient();
+  const ai = getTtsGeminiClient();
   const cleanText = params.text.trim().slice(0, 4500);
   if (!cleanText) {
     throw new GeminiServiceError('Speech text cannot be empty.', 400);
   }
 
-  const voice = params.voiceName || 'Charon';
-  const style =
-    params.style ||
-    `Formal international conference delegate speaking clearly in ${params.lang} at measured diplomatic cadence`;
+  const allowedVoices = new Set(['Zephyr', 'Kore', 'Puck', 'Charon', 'Fenrir']);
+  const voice = params.voiceName && allowedVoices.has(params.voiceName) ? params.voiceName : 'Zephyr';
+  const deliveryKey = params.style || 'natural';
+  const { stylePrompt, useBreathCues } = buildHumanConferenceVoiceDirection(params.lang, deliveryKey);
+  const flagshipText = useBreathCues ? shapeTextWithNaturalBreathing(cleanText) : cleanText;
 
-  try {
-    const response = await withTransientRetry(() =>
-      ai.models.generateContent({
-        model: 'gemini-3.8-flash-lite-tts',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: cleanText,
-                speechMetadata: {
-                  style,
+  const callTts = async (
+    model: 'gemini-3.8-flash-tts' | 'gemini-3.8-flash-lite-tts',
+    textBody: string,
+    includeStyleMetadata = true
+  ) =>
+    ai.models.generateContent({
+      model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            includeStyleMetadata
+              ? {
+                  text: textBody,
+                  speechMetadata: {
+                    style: stylePrompt,
+                  },
+                }
+              : {
+                  text: textBody,
                 },
-              },
-            ],
-          },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: voice },
-            },
+          ],
+        },
+      ],
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voice },
           },
         },
-      })
-    );
+      },
+    });
+
+  try {
+    let response;
+    try {
+      // Flagship Voice Design TTS model for genuinely natural human prosody and <breath> phrasing
+      response = await withTransientRetry(
+        () => callTts('gemini-3.8-flash-tts', flagshipText, true),
+        [],
+        16000,
+        'Síntesis vocal'
+      );
+    } catch (primaryErr) {
+      const parsed = parseUpstreamError(primaryErr);
+      const schemaReject =
+        parsed.code === 400 && /speechMetadata|breath|Unsupported/i.test(parsed.message);
+      if (parsed.transient || schemaReject) {
+        // Fallback to high-efficiency TTS if flagship is temporarily busy or schema-restricted
+        response = await withTransientRetry(
+          () => callTts('gemini-3.8-flash-lite-tts', cleanText, !schemaReject),
+          [400],
+          15000,
+          'Síntesis vocal'
+        );
+      } else {
+        throw primaryErr;
+      }
+    }
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64Audio) {
@@ -261,7 +361,7 @@ export async function evaluateInterpretation(
   const feedbackLang = payload.uiLang || 'es';
 
   const prompt = `Evaluate this ${payload.mode} conference interpretation performance.
-Respond in language code "${feedbackLang}".
+Respond in language code "${feedbackLang}" (es = Spanish, fr = French, ar = Arabic).
 
 Source language: ${payload.sourceLang}
 Target language: ${payload.targetLang}
@@ -390,7 +490,7 @@ export async function suggestNoteSymbols(params: {
   const runSuggest = async (modelName: 'gemini-4-hydrogen' | 'gemini-3.1-flash-lite') =>
     ai.models.generateContent({
       model: modelName,
-      contents: `Extract 6 high-frequency consecutive interpreting note-taking symbols (following Jean-François Rozan's 7 principles and Matyssek notation) for this speech excerpt in ${params.sourceLang}. Explain concepts and usage in language code "${params.uiLang || 'es'}".\n\nExcerpt:\n"""${excerpt}"""`,
+      contents: `Extract 6 high-frequency consecutive interpreting note-taking symbols (following Jean-François Rozan's 7 principles and Matyssek notation) for this speech excerpt in ${params.sourceLang}. Explain concepts and usage in language code "${params.uiLang || 'es'}" (es = Spanish, fr = French, ar = Arabic).\n\nExcerpt:\n"""${excerpt}"""`,
       config: {
         thinkingConfig: {
           thinkingLevel:

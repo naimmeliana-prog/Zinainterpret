@@ -29,7 +29,7 @@ async function startServer() {
       }
       const audio = await generateConferenceSpeechAudio({
         text,
-        lang: typeof lang === 'string' ? lang : 'en',
+        lang: typeof lang === 'string' ? lang : 'fr',
         voiceName: typeof voiceName === 'string' ? voiceName : undefined,
         style: typeof style === 'string' ? style : undefined,
       });
@@ -54,7 +54,7 @@ async function startServer() {
         userTextOverride:
           typeof body.userTextOverride === 'string' ? body.userTextOverride : undefined,
         sourceTranscript: body.sourceTranscript,
-        sourceLang: typeof body.sourceLang === 'string' ? body.sourceLang : 'en',
+        sourceLang: typeof body.sourceLang === 'string' ? body.sourceLang : 'fr',
         targetLang: typeof body.targetLang === 'string' ? body.targetLang : 'es',
         uiLang: typeof body.uiLang === 'string' ? body.uiLang : 'es',
         mode: body.mode === 'consecutive' ? 'consecutive' : 'simultaneous',
@@ -78,7 +78,7 @@ async function startServer() {
       }
       const data = await suggestNoteSymbols({
         excerpt,
-        sourceLang: typeof sourceLang === 'string' ? sourceLang : 'en',
+        sourceLang: typeof sourceLang === 'string' ? sourceLang : 'fr',
         uiLang: typeof uiLang === 'string' ? uiLang : 'es',
       });
       return res.json(data);

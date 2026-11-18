@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Download, WifiOff, X } from 'lucide-react';
-import { usePWAInstall } from '../hooks/usePWAInstall';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { usePWAInstall } from '../hooks/usePWAInstall';
+import type { Translations } from '../i18n/translations';
 
-export const PWAInstallButton: React.FC<{ label: string }> = ({ label }) => {
+export const PWAInstallButton: React.FC<{ label: string; t: Translations }> = ({ label, t }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
 
@@ -38,22 +39,21 @@ export const PWAInstallButton: React.FC<{ label: string }> = ({ label }) => {
             <div className="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131A26] p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                  Instalar en iPhone / iPad
+                  {t.iosInstallTitle}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setShowIOSGuide(false)}
                   className="p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
-                  aria-label="Cerrar"
+                  aria-label={t.closeLabel}
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                1. Pulsa el botón <strong>Compartir</strong> en la barra inferior de Safari.
+                1. {t.iosInstallStep1}
                 <br />
-                2. Selecciona <strong>Añadir a pantalla de inicio</strong> para activar el modo
-                offline.
+                2. {t.iosInstallStep2}
               </p>
             </div>
           </div>
@@ -72,7 +72,7 @@ export const OfflineBanner: React.FC<{ message: string }> = ({ message }) => {
   return (
     <div
       role="status"
-      className="fixed bottom-20 md:bottom-5 left-4 z-40 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-950/90 px-3.5 py-2 text-xs font-medium text-amber-100 backdrop-blur-md"
+      className="fixed bottom-20 md:bottom-5 start-4 z-40 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-950/90 px-3.5 py-2 text-xs font-medium text-amber-100 backdrop-blur-md"
     >
       <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
       <span>{message}</span>

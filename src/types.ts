@@ -1,7 +1,9 @@
-export type UiLang = 'es' | 'en' | 'fr' | 'de' | 'it' | 'pt';
-export type SpeechLang = 'es' | 'en' | 'fr' | 'de' | 'it' | 'pt' | 'ar' | 'zh';
+export type UiLang = 'es' | 'fr' | 'ar';
+export type SpeechLang = 'es' | 'fr' | 'ar';
 export type ThemePreference = 'system' | 'dark' | 'light';
 export type InterpretingMode = 'simultaneous' | 'consecutive';
+export type ConferenceVoiceName = 'Zephyr' | 'Kore' | 'Puck' | 'Charon' | 'Fenrir';
+export type ConferenceVoiceStyle = 'natural' | 'diplomatic' | 'measured';
 
 export interface ConferenceExercise {
   id: string;
@@ -13,7 +15,7 @@ export interface ConferenceExercise {
   durationLabel: string;
   titles: Record<UiLang, string>;
   objectives: Record<UiLang, string>;
-  terminology: Array<{ term: string; note: string }>;
+  terminology: Array<{ term: string; note: Record<UiLang, string> }>;
   scripts: Record<SpeechLang, string>;
 }
 
@@ -32,8 +34,8 @@ export interface NoteSymbol {
   meaning: Record<UiLang, string>;
   category: NoteSymbolCategory;
   example: string;
-  usageNote?: string;
-  applicationSentence?: string;
+  usageNote?: string | Record<UiLang, string>;
+  applicationSentence?: string | Record<UiLang, string>;
   applicationNotation?: string;
 }
 

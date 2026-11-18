@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="es" class="dark">
+<html lang="es" dir="ltr" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Cabina — Estudio de Interpretación de Conferencias</title>
     <meta
       name="description"
-      content="Plataforma gratuita y de código abierto para la formación progresiva en interpretación simultánea y consecutiva, con ejercicios de audio, toma de notas con símbolos, análisis de voz con IA, cifrado local AES-GCM y sincronización privada."
+      content="Plataforma gratuita y de código abierto para la formación progresiva en interpretación simultánea y consecutiva (ES, FR, AR), con ejercicios de audio, toma de notas con símbolos, análisis de voz con IA y cifrado local AES-GCM."
     />
     <meta property="og:title" content="Cabina — Estudio de Interpretación de Conferencias" />
     <meta
       property="og:description"
-      content="Formación progresiva y visual en interpretación simultánea y consecutiva con repositorios ONU/UE, grabación comparativa y análisis de voz con IA."
+      content="Formación progresiva y visual en interpretación simultánea y consecutiva en Español, Francés y Árabe con repositorios ONU/UE, grabación comparativa y análisis de voz con IA."
     />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -25,7 +25,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <script>
@@ -38,6 +38,12 @@
           var root = document.documentElement;
           if (isDark) root.classList.add('dark');
           else root.classList.remove('dark');
+
+          var uiLang = localStorage.getItem('cabina_ui_lang');
+          if (uiLang === 'ar' || uiLang === 'fr' || uiLang === 'es') {
+            root.lang = uiLang;
+            root.dir = uiLang === 'ar' ? 'rtl' : 'ltr';
+          }
         } catch (e) {}
       })();
     </script>
