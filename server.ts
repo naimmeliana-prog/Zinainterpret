@@ -106,7 +106,10 @@ async function startServer() {
             chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
           }
           let body = Buffer.concat(chunks).toString('utf-8');
-          body = body.replace(/await wsTransport\.connect\(handlers\);/g, 'return;');
+          body = body
+            .replace(/await wsTransport\.connect\(handlers\);/g, 'return;')
+            .replace(/ws\.send\(JSON\.stringify\(data\)\);/g, 'ws?.send(JSON.stringify(data));')
+            .replace(/wsTransport\.send\(data\);/g, 'return;');
           if (!res.headersSent) {
             res.setHeader('Content-Length', Buffer.byteLength(body));
           }
