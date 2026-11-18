@@ -4,6 +4,19 @@ export type ThemePreference = 'system' | 'dark' | 'light';
 export type InterpretingMode = 'simultaneous' | 'consecutive';
 export type ConferenceVoiceName = 'Zephyr' | 'Kore' | 'Puck' | 'Charon' | 'Fenrir';
 export type ConferenceVoiceStyle = 'natural' | 'diplomatic' | 'measured';
+export type SpeechEngineMode = 'auto' | 'gemini' | 'webspeech';
+export type GlossaryDomain = 'diplomacy' | 'economy' | 'climate' | 'law' | 'health' | 'tech';
+
+export interface GlossaryTerm {
+  id: string;
+  domain: GlossaryDomain;
+  es: string;
+  fr: string;
+  ar: string;
+  registerNote: Record<UiLang, string>;
+  contextSentence?: Record<SpeechLang, string>;
+  isCustom?: boolean;
+}
 
 export interface ConferenceExercise {
   id: string;

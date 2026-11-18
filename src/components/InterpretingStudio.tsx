@@ -19,12 +19,18 @@ import {
   VOICE_STYLE_OPTIONS,
   type Translations,
 } from '../i18n/translations';
+import {
+  getRankedVoicesForLang,
+  speakWithNaturalCadence,
+  type NaturalSpeechController,
+} from '../lib/speechSynthesisHelper';
 import type {
   ConferenceExercise,
   ConferenceVoiceName,
   ConferenceVoiceStyle,
   InterpretingMode,
   LocalPracticeSession,
+  SpeechEngineMode,
   SpeechLang,
   UiLang,
   VoiceEvaluation,
@@ -56,36 +62,6 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-function pickNaturalBrowserVoice(
-  voices: SpeechSynthesisVoice[],
-  lang: SpeechLang
-): SpeechSynthesisVoice | undefined {
-  const prefix = lang === 'es' ? 'es' : lang === 'fr' ? 'fr' : 'ar';
-  const matching = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix));
-  if (matching.length === 0) return undefined;
-
-  const scoreVoice = (v: SpeechSynthesisVoice): number => {
-    const name = v.name.toLowerCase();
-    let score = 0;
-    if (name.includes('natural')) score += 50;
-    if (name.includes('online')) score += 40;
-    if (name.includes('neural') || name.includes('wavenet')) score += 35;
-    if (name.includes('google')) score += 25;
-    if (name.includes('premium') || name.includes('enhanced')) score += 20;
-    if (
-      /monica|mónica|jorge|elena|lucia|lucía|amélie|amelie|thomas|aurelie|aurélie|maged|laila|tarik|salma|hoda/.test(
-        name
-      )
-    ) {
-      score += 15;
-    }
-    if (!v.localService) score += 10;
-    return score;
-  };
-
-  return [...matching].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
-}
-
 export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   uiLang,
   t,
@@ -103,20 +79,25 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   );
   const [showScriptText, setShowScriptText] = useState(false);
 
-  // Human Conference Voice Persona & Cadence
+  // Human Conference Voice Engine, Persona & Cadence
+  const [speechEngine, setSpeechEngine] = useState<SpeechEngineMode>('auto');
   const [voiceName, setVoiceName] = useState<ConferenceVoiceName>('Zephyr');
   const [voiceStyle, setVoiceStyle] = useState<ConferenceVoiceStyle>('natural');
+  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedBrowserVoiceURI, setSelectedBrowserVoiceURI] = useState<string>('');
 
   // Source Audio Playback
   const [sourceAudioUrl, setSourceAudioUrl] = useState<string>('');
   const [sourceAudioBase64, setSourceAudioBase64] = useState<string>('');
   const [synthesizing, setSynthesizing] = useState(false);
   const [synthReadyNotice, setSynthReadyNotice] = useState(false);
+  const [webSpeechNotice, setWebSpeechNotice] = useState(false);
   const [synthError, setSynthError] = useState('');
   const [isPlayingSource, setIsPlayingSource] = useState(false);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [decalageSec, setDecalageSec] = useState<number>(3);
   const sourceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const speechCtrlRef = useRef<NaturalSpeechController | null>(null);
 
   // Recording & Waveform
   const [isRecording, setIsRecording] = useState(false);
@@ -147,25 +128,34 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   const [savingVault, setSavingVault] = useState(false);
   const [savedNotice, setSavedNotice] = useState('');
 
+  const rankedBrowserVoices = getRankedVoicesForLang(browserVoices, sourceLang);
+
   useEffect(() => {
     setMode(exercise.mode);
     setCustomScript(exercise.scripts[sourceLang] || exercise.scripts.es);
     setSourceAudioUrl('');
     setSourceAudioBase64('');
     setSynthReadyNotice(false);
+    setWebSpeechNotice(false);
     setSynthError('');
     setIsPlayingSource(false);
     setEvaluation(null);
     setSavedNotice('');
-    window.speechSynthesis?.cancel();
+    speechCtrlRef.current?.stop();
   }, [exercise, sourceLang]);
+
+  useEffect(() => {
+    setSelectedBrowserVoiceURI('');
+  }, [sourceLang]);
 
   useEffect(() => {
     setSourceAudioUrl('');
     setSourceAudioBase64('');
     setSynthReadyNotice(false);
+    setWebSpeechNotice(false);
     setIsPlayingSource(false);
-  }, [voiceName, voiceStyle]);
+    speechCtrlRef.current?.stop();
+  }, [voiceName, voiceStyle, speechEngine]);
 
   useEffect(() => {
     if (requestedMode) {
@@ -180,13 +170,26 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
   }, [playbackRate]);
 
   useEffect(() => {
-    window.speechSynthesis?.getVoices?.();
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const syncVoices = () => {
+      const list = window.speechSynthesis.getVoices();
+      if (list.length > 0) setBrowserVoices(list);
+    };
+    syncVoices();
+    window.speechSynthesis.addEventListener?.('voiceschanged', syncVoices);
+    return () => {
+      window.speechSynthesis.removeEventListener?.('voiceschanged', syncVoices);
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((tr) => tr.stop());
       }
+      speechCtrlRef.current?.stop();
       window.speechSynthesis?.cancel();
     };
   }, []);
@@ -211,10 +214,39 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
     drawIdleWave();
   }, []);
 
+  const playWithNaturalWebSpeech = () => {
+    if (isPlayingSource) {
+      speechCtrlRef.current?.stop();
+      setIsPlayingSource(false);
+      return;
+    }
+
+    speechCtrlRef.current?.stop();
+    speechCtrlRef.current = speakWithNaturalCadence({
+      text: customScript,
+      lang: sourceLang,
+      playbackRate,
+      style: voiceStyle,
+      preferredVoiceURI: selectedBrowserVoiceURI || undefined,
+      onStart: () => setIsPlayingSource(true),
+      onEnd: () => setIsPlayingSource(false),
+      onError: () => setIsPlayingSource(false),
+    });
+  };
+
   const synthesizeOriginalSpeech = async () => {
-    setSynthesizing(true);
     setSynthError('');
     setSynthReadyNotice(false);
+    setWebSpeechNotice(false);
+
+    if (speechEngine === 'webspeech') {
+      setSourceAudioUrl('');
+      setSourceAudioBase64('');
+      setWebSpeechNotice(true);
+      return;
+    }
+
+    setSynthesizing(true);
     try {
       const res = await fetch('/api/gemini/tts', {
         method: 'POST',
@@ -233,20 +265,25 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
       setSourceAudioBase64(data.audioBase64);
       setSynthReadyNotice(true);
     } catch (err) {
-      setSynthError(
-        err instanceof Error ? `${err.message} — ${t.speechFallbackHint}` : t.speechFallbackHint
-      );
+      if (speechEngine === 'auto') {
+        setWebSpeechNotice(true);
+      } else {
+        setSynthError(
+          err instanceof Error ? `${err.message} — ${t.speechFallbackHint}` : t.speechFallbackHint
+        );
+      }
     } finally {
       setSynthesizing(false);
     }
   };
 
   const togglePlaySource = () => {
-    if (sourceAudioUrl && sourceAudioRef.current) {
+    if (speechEngine !== 'webspeech' && sourceAudioUrl && sourceAudioRef.current) {
       if (isPlayingSource) {
         sourceAudioRef.current.pause();
         setIsPlayingSource(false);
       } else {
+        speechCtrlRef.current?.stop();
         sourceAudioRef.current.playbackRate = playbackRate;
         void sourceAudioRef.current.play();
         setIsPlayingSource(true);
@@ -254,32 +291,7 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
       return;
     }
 
-    // Offline browser speechSynthesis fallback preferring highest-quality natural voices
-    if ('speechSynthesis' in window) {
-      if (isPlayingSource) {
-        window.speechSynthesis.cancel();
-        setIsPlayingSource(false);
-        return;
-      }
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(customScript);
-      const langMap: Record<SpeechLang, string> = {
-        es: 'es-ES',
-        fr: 'fr-FR',
-        ar: 'ar-SA',
-      };
-      utter.lang = langMap[sourceLang] || 'es-ES';
-      const bestVoice = pickNaturalBrowserVoice(window.speechSynthesis.getVoices(), sourceLang);
-      if (bestVoice) {
-        utter.voice = bestVoice;
-      }
-      utter.rate = playbackRate;
-      utter.pitch = 0.98;
-      utter.onend = () => setIsPlayingSource(false);
-      utter.onerror = () => setIsPlayingSource(false);
-      setIsPlayingSource(true);
-      window.speechSynthesis.speak(utter);
-    }
+    playWithNaturalWebSpeech();
   };
 
   const startWaveformLoop = (analyser: AnalyserNode) => {
@@ -598,22 +610,20 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
               </button>
             </div>
 
-            {/* Human Conference Voice & Natural Cadence Controls */}
+            {/* Human Conference Voice Engine, Speaker & Natural Cadence Controls */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <label className="space-y-1">
                 <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                  {t.voicePersonaLabel}
+                  {t.voiceEngineLabel}
                 </span>
                 <select
-                  value={voiceName}
-                  onChange={(e) => setVoiceName(e.target.value as ConferenceVoiceName)}
+                  value={speechEngine}
+                  onChange={(e) => setSpeechEngine(e.target.value as SpeechEngineMode)}
                   className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[40px]"
                 >
-                  {VOICE_PERSONA_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.labels[uiLang]}
-                    </option>
-                  ))}
+                  <option value="auto">{t.voiceEngineAuto}</option>
+                  <option value="gemini">{t.voiceEngineGemini}</option>
+                  <option value="webspeech">{t.voiceEngineWebSpeech}</option>
                 </select>
               </label>
 
@@ -633,6 +643,49 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
                   ))}
                 </select>
               </label>
+
+              {speechEngine !== 'webspeech' && (
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    {t.voicePersonaLabel}
+                  </span>
+                  <select
+                    value={voiceName}
+                    onChange={(e) => setVoiceName(e.target.value as ConferenceVoiceName)}
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[40px]"
+                  >
+                    {VOICE_PERSONA_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.labels[uiLang]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {(speechEngine === 'webspeech' || speechEngine === 'auto') && (
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    {t.browserVoiceLabel}
+                  </span>
+                  <select
+                    value={selectedBrowserVoiceURI}
+                    onChange={(e) => setSelectedBrowserVoiceURI(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B0F17] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 min-h-[40px]"
+                  >
+                    <option value="">
+                      {rankedBrowserVoices[0]
+                        ? `${t.browserVoiceAutoDefault} — ${rankedBrowserVoices[0].name}`
+                        : t.noBrowserVoicesHint}
+                    </option>
+                    {rankedBrowserVoices.map((v) => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {v.name} ({v.lang})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
 
             {showScriptText && (
@@ -646,15 +699,17 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
             )}
 
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => void synthesizeOriginalSpeech()}
-                disabled={synthesizing}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 min-h-[44px]"
-              >
-                <AudioLines className="w-4 h-4 text-sky-500" aria-hidden="true" />
-                <span>{synthesizing ? t.generatingSpeech : t.generateSpeechBtn}</span>
-              </button>
+              {speechEngine !== 'webspeech' && (
+                <button
+                  type="button"
+                  onClick={() => void synthesizeOriginalSpeech()}
+                  disabled={synthesizing}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 min-h-[44px]"
+                >
+                  <AudioLines className="w-4 h-4 text-sky-500" aria-hidden="true" />
+                  <span>{synthesizing ? t.generatingSpeech : t.generateSpeechBtn}</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -683,6 +738,10 @@ export const InterpretingStudio: React.FC<InterpretingStudioProps> = ({
               <p className="text-xs text-emerald-600 dark:text-emerald-400">
                 {t.conferenceAudioReady}
               </p>
+            )}
+
+            {webSpeechNotice && !synthReadyNotice && !synthError && (
+              <p className="text-xs text-sky-600 dark:text-sky-400">{t.webSpeechReadyNotice}</p>
             )}
 
             {synthError && (

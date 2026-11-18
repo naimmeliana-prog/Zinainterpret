@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpenCheck, Compass, Headphones, Layers, PenTool } from 'lucide-react';
+import { BookMarked, BookOpenCheck, Compass, Headphones, Layers, PenTool } from 'lucide-react';
 import {
   getRozanAbbreviations,
   getRozanConnectors,
@@ -12,6 +12,7 @@ import { EXTENDED_NOTE_SYMBOLS } from '../data/techniquesAndSymbols';
 import type { Translations } from '../i18n/translations';
 import type { UiLang } from '../types';
 import { SymbolLibrary } from './SymbolLibrary';
+import { ThematicGlossary } from './ThematicGlossary';
 
 interface TechniquesAndManualProps {
   uiLang: UiLang;
@@ -25,7 +26,7 @@ export const TechniquesAndManual: React.FC<TechniquesAndManualProps> = ({
   onJumpToStudio,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'simultaneous' | 'consecutive' | 'examples' | 'symbols'
+    'simultaneous' | 'consecutive' | 'examples' | 'symbols' | 'glossary'
   >('consecutive');
   const [abbrDomain, setAbbrDomain] = useState<'all' | 'economy' | 'politics'>('all');
 
@@ -110,6 +111,18 @@ export const TechniquesAndManual: React.FC<TechniquesAndManualProps> = ({
             <span>
               {t.manualTabSymbols} ({EXTENDED_NOTE_SYMBOLS.length})
             </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('glossary')}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 min-h-[38px] ${
+              activeTab === 'glossary'
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <BookMarked className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{t.manualTabGlossary}</span>
           </button>
         </div>
       </div>
@@ -530,6 +543,9 @@ export const TechniquesAndManual: React.FC<TechniquesAndManualProps> = ({
       {activeTab === 'symbols' && (
         <SymbolLibrary uiLang={uiLang} t={t} onJumpToStudio={onJumpToStudio} />
       )}
+
+      {/* Tab 5: Trilingual Thematic Conference Glossary */}
+      {activeTab === 'glossary' && <ThematicGlossary uiLang={uiLang} t={t} />}
     </section>
   );
 };

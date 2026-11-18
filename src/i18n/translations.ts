@@ -350,6 +350,47 @@ export interface Translations {
   symLibTryInPad: string;
   symLibNoMatchesPrefix: string;
   symLibResetFilters: string;
+  // Thematic Glossary & Voice Engine Controls
+  manualTabGlossary: string;
+  glossaryBadge: string;
+  glossaryHeading: string;
+  glossarySub: string;
+  glossarySearchPlaceholder: string;
+  glossarySearchAria: string;
+  glossaryAddBtn: string;
+  glossaryCancelBtn: string;
+  glossarySaveTermBtn: string;
+  glossaryUpdateTermBtn: string;
+  glossaryExportBtn: string;
+  glossaryFilterAll: string;
+  glossaryFilterCustom: string;
+  glossaryFilterMastered: string;
+  glossaryMarkMastered: string;
+  glossaryUnmarkMastered: string;
+  glossaryEditBtn: string;
+  glossaryDeleteBtn: string;
+  glossaryConfirmDelete: string;
+  glossaryDomainLabel: string;
+  glossaryEsLabel: string;
+  glossaryFrLabel: string;
+  glossaryArLabel: string;
+  glossaryNoteLabel: string;
+  glossaryContextLabel: string;
+  glossaryValidationErr: string;
+  glossaryEmptyState: string;
+  glossaryCustomBadge: string;
+  glossaryCuratedBadge: string;
+  glossaryListenLabel: string;
+  glossaryShowingPrefix: string;
+  glossaryMasteredLabel: string;
+  voiceEngineLabel: string;
+  voiceEngineAuto: string;
+  voiceEngineGemini: string;
+  voiceEngineWebSpeech: string;
+  browserVoiceLabel: string;
+  browserVoiceAutoDefault: string;
+  noBrowserVoicesHint: string;
+  webSpeechReadyNotice: string;
 }
 
 const es: Translations = {
@@ -585,6 +626,47 @@ const es: Translations = {
   symLibTryInPad: 'Probar en cuaderno',
   symLibNoMatchesPrefix: 'No hay símbolos que coincidan con',
   symLibResetFilters: 'Restablecer filtros',
+  manualTabGlossary: 'Glosario temático',
+  glossaryBadge: 'Vocabulario trilingüe ES · FR · AR',
+  glossaryHeading: 'Glosario Temático de Conferencias',
+  glossarySub:
+    'Busca, escucha la pronunciación y gestiona terminología especializada en español, francés y árabe. Añade términos propios de tus asignaciones y márcalos como dominados.',
+  glossarySearchPlaceholder: 'Buscar término en español, francés, árabe o nota...',
+  glossarySearchAria: 'Buscar en el glosario temático',
+  glossaryAddBtn: '+ Añadir término',
+  glossaryCancelBtn: 'Cancelar',
+  glossarySaveTermBtn: 'Guardar en glosario',
+  glossaryUpdateTermBtn: 'Actualizar término',
+  glossaryExportBtn: 'Exportar JSON',
+  glossaryFilterAll: 'Todos',
+  glossaryFilterCustom: 'Propios',
+  glossaryFilterMastered: 'Dominados',
+  glossaryMarkMastered: 'Marcar dominado',
+  glossaryUnmarkMastered: 'Dominado',
+  glossaryEditBtn: 'Editar',
+  glossaryDeleteBtn: 'Eliminar',
+  glossaryConfirmDelete: '¿Confirmar eliminación?',
+  glossaryDomainLabel: 'Área temática',
+  glossaryEsLabel: 'Español (ES)',
+  glossaryFrLabel: 'Francés (FR)',
+  glossaryArLabel: 'Árabe (AR)',
+  glossaryNoteLabel: 'Nota de registro o matiz en cabina',
+  glossaryContextLabel: 'Frase de contexto (opcional)',
+  glossaryValidationErr: 'Introduce al menos los términos en español, francés y árabe.',
+  glossaryEmptyState: 'No se encontraron términos con los filtros actuales.',
+  glossaryCustomBadge: 'Personalizado',
+  glossaryCuratedBadge: 'ONU / UE',
+  glossaryListenLabel: 'Escuchar',
+  glossaryShowingPrefix: 'Términos visibles:',
+  glossaryMasteredLabel: 'Dominados:',
+  voiceEngineLabel: 'Motor vocal del orador',
+  voiceEngineAuto: 'Voz humana HD (Gemini + Web Speech)',
+  voiceEngineGemini: 'Audio Studio HD (Gemini Voice Design)',
+  voiceEngineWebSpeech: 'Web Speech API (Voz natural del sistema)',
+  browserVoiceLabel: 'Voz natural del navegador',
+  browserVoiceAutoDefault: 'Automática (mejor voz natural detectada)',
+  noBrowserVoicesHint: 'Usando perfil estándar del navegador',
+  webSpeechReadyNotice: 'Voz natural del sistema preparada con cadencia humana por cláusulas.',
 };
 
 const fr: Translations = {
@@ -819,6 +901,47 @@ const fr: Translations = {
   symLibTryInPad: 'Essayer dans le bloc',
   symLibNoMatchesPrefix: 'Aucun symbole ne correspond à',
   symLibResetFilters: 'Réinitialiser les filtres',
+  manualTabGlossary: 'Glossaire thématique',
+  glossaryBadge: 'Vocabulaire trilingue ES · FR · AR',
+  glossaryHeading: 'Glossaire Thématique de Conférence',
+  glossarySub:
+    'Recherchez, écoutez la prononciation et gérez votre terminologie spécialisée en espagnol, français et arabe. Ajoutez vos propres fiches et suivez les termes maîtrisés.',
+  glossarySearchPlaceholder: 'Rechercher un terme en espagnol, français, arabe...',
+  glossarySearchAria: 'Rechercher dans le glossaire thématique',
+  glossaryAddBtn: '+ Ajouter un terme',
+  glossaryCancelBtn: 'Annuler',
+  glossarySaveTermBtn: 'Enregistrer dans le glossaire',
+  glossaryUpdateTermBtn: 'Mettre à jour',
+  glossaryExportBtn: 'Exporter JSON',
+  glossaryFilterAll: 'Tous',
+  glossaryFilterCustom: 'Personnalisés',
+  glossaryFilterMastered: 'Maîtrisés',
+  glossaryMarkMastered: 'Marquer maîtrisé',
+  glossaryUnmarkMastered: 'Maîtrisé',
+  glossaryEditBtn: 'Modifier',
+  glossaryDeleteBtn: 'Supprimer',
+  glossaryConfirmDelete: 'Confirmer ?',
+  glossaryDomainLabel: 'Domaine thématique',
+  glossaryEsLabel: 'Espagnol (ES)',
+  glossaryFrLabel: 'Français (FR)',
+  glossaryArLabel: 'Arabe (AR)',
+  glossaryNoteLabel: 'Note de registre ou nuance de cabine',
+  glossaryContextLabel: 'Phrase de contexte (facultatif)',
+  glossaryValidationErr: 'Veuillez saisir les équivalents en espagnol, français et arabe.',
+  glossaryEmptyState: 'Aucun terme ne correspond aux filtres sélectionnés.',
+  glossaryCustomBadge: 'Personnalisé',
+  glossaryCuratedBadge: 'ONU / UE',
+  glossaryListenLabel: 'Écouter',
+  glossaryShowingPrefix: 'Termes affichés :',
+  glossaryMasteredLabel: 'Maîtrisés :',
+  voiceEngineLabel: 'Moteur vocal de l’orateur',
+  voiceEngineAuto: 'Voix humaine HD (Gemini + Web Speech)',
+  voiceEngineGemini: 'Audio Studio HD (Gemini Voice Design)',
+  voiceEngineWebSpeech: 'Web Speech API (Voix naturelle du système)',
+  browserVoiceLabel: 'Voix naturelle du navigateur',
+  browserVoiceAutoDefault: 'Automatique (meilleure voix naturelle détectée)',
+  noBrowserVoicesHint: 'Profil vocal standard du navigateur',
+  webSpeechReadyNotice: 'Voix naturelle Web Speech prête avec respiration entre propositions.',
 };
 
 const ar: Translations = {
@@ -1051,6 +1174,47 @@ const ar: Translations = {
   symLibTryInPad: 'تجربة في الدفتر',
   symLibNoMatchesPrefix: 'لا توجد رموز تطابق',
   symLibResetFilters: 'إعادة ضبط الفلاتر',
+  manualTabGlossary: 'المسرد الموضوعي',
+  glossaryBadge: 'معجم ثلاثي اللغات ES · FR · AR',
+  glossaryHeading: 'المسرد الموضوعي لمصطلحات المؤتمرات',
+  glossarySub:
+    'ابحث واستمع إلى النطق وأدِر المصطلحات المتخصصة بالإسبانية والفرنسية والعربية. أضف مصطلحاتك الخاصة وتابع ما أتقنته منها.',
+  glossarySearchPlaceholder: 'ابحث عن مصطلح بالإسبانية أو الفرنسية أو العربية...',
+  glossarySearchAria: 'البحث في المسرد الموضوعي',
+  glossaryAddBtn: '+ إضافة مصطلح',
+  glossaryCancelBtn: 'إلغاء',
+  glossarySaveTermBtn: 'حفظ في المسرد',
+  glossaryUpdateTermBtn: 'تحديث المصطلح',
+  glossaryExportBtn: 'تصدير JSON',
+  glossaryFilterAll: 'الكل',
+  glossaryFilterCustom: 'مخصصة',
+  glossaryFilterMastered: 'متقَنة',
+  glossaryMarkMastered: 'تحديد كمتقَن',
+  glossaryUnmarkMastered: 'متقَن',
+  glossaryEditBtn: 'تعديل',
+  glossaryDeleteBtn: 'حذف',
+  glossaryConfirmDelete: 'تأكيد الحذف؟',
+  glossaryDomainLabel: 'المجال الموضوعي',
+  glossaryEsLabel: 'الإسبانية (ES)',
+  glossaryFrLabel: 'الفرنسية (FR)',
+  glossaryArLabel: 'العربية (AR)',
+  glossaryNoteLabel: 'ملاحظة الأسلوب أو الفروق الدلالية',
+  glossaryContextLabel: 'جملة سياقية (اختياري)',
+  glossaryValidationErr: 'يرجى إدخال المقابلات بالإسبانية والفرنسية والعربية.',
+  glossaryEmptyState: 'لا توجد مصطلحات مطابقة لعوامل التصفية الحالية.',
+  glossaryCustomBadge: 'مخصص',
+  glossaryCuratedBadge: 'الأمم المتحدة / الاتحاد الأوروبي',
+  glossaryListenLabel: 'استماع',
+  glossaryShowingPrefix: 'المصطلحات المعروضة:',
+  glossaryMasteredLabel: 'المتقَنة:',
+  voiceEngineLabel: 'محرك صوت المتحدث',
+  voiceEngineAuto: 'صوت بشري عالي الدقة (Gemini + Web Speech)',
+  voiceEngineGemini: 'استوديو صوتي HD (تصميم الصوت من Gemini)',
+  voiceEngineWebSpeech: 'Web Speech API (صوت طبيعي من النظام)',
+  browserVoiceLabel: 'الصوت الطبيعي في المتصفح',
+  browserVoiceAutoDefault: 'تلقائي (أفضل صوت طبيعي مكتشف)',
+  noBrowserVoicesHint: 'استخدام الصوت الافتراضي للمتصفح',
+  webSpeechReadyNotice: 'تم تجهيز الصوت الطبيعي عبر Web Speech بإيقاع بشري ووقفات تنفس.',
 };
 
 export const TRANSLATIONS: Record<UiLang, Translations> = {
